@@ -15,6 +15,7 @@ SRCS := src/main.c \
 OBJS := $(SRCS:.c=.o)
 STRING_POOL_TEST := tests/vh_string_pool_test
 PARSE_GROUP_KEY_TEST := tests/vh_parse_group_key_test
+TEST_BINS := $(STRING_POOL_TEST) $(PARSE_GROUP_KEY_TEST)
 
 AMIGA_CC ?= vc
 AMIGA_AUTO ?= 1
@@ -54,14 +55,35 @@ AMIGA_LDFLAGS := $(AMIGA_LDFLAGS_BASE)
 endif
 
 ifeq ($(OS),Windows_NT)
-AMIGA_MKDIR_BUILD = powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path '../../build/amiga/varianttest' | Out-Null"
-AMIGA_MKDIR_BIN = powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path '../../Bin/Amiga' | Out-Null"
+AMIGA_MKDIR_BUILD = cmd /C "if not exist ..\\..\\build\\amiga\\varianttest mkdir ..\\..\\build\\amiga\\varianttest"
+AMIGA_MKDIR_BIN = cmd /C "if not exist ..\\..\\Bin\\Amiga mkdir ..\\..\\Bin\\Amiga"
 else
 AMIGA_MKDIR_BUILD = mkdir -p ../../build/amiga/varianttest
 AMIGA_MKDIR_BIN = mkdir -p ../../Bin/Amiga
 endif
 
-.PHONY: all clean test varianttest-amiga
+.PHONY: all clean help test test-build varianttest-amiga
+
+help:
+	@echo whdload-parser-lab build targets
+	@echo.
+	@echo   make all               Build host parser executable (variant_harness)
+	@echo   make test-build        Build host parser + test executables only
+	@echo   make test              Build and run all tests
+	@echo   make varianttest-amiga Build Amiga executable (requires vbcc/vc setup)
+	@echo   make clean             Remove host/amiga build artifacts
+	@echo.
+	@echo Common variables:
+	@echo   CC=compiler            Host C compiler override (default: gcc)
+	@echo   CFLAGS=flags           Host compiler flags
+	@echo   LDFLAGS=flags          Host linker flags
+	@echo   AMIGA_CC=compiler      Amiga compiler override (default: vc)
+	@echo   AMIGA_AUTO=0 or 1      Toggle -lauto link flag (default: 1)
+	@echo.
+	@echo Examples:
+	@echo   make test-build
+	@echo   make test
+	@echo   make varianttest-amiga AMIGA_AUTO=0
 
 all: $(TARGET)
 
@@ -72,15 +94,10 @@ src/%.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 test: $(TARGET)
+	$(MAKE) test-build
 ifeq ($(OS),Windows_NT)
-	$(CC) $(CFLAGS) tests/test_vh_string_pool.c src/vh_string_pool.c src/vh_memtrack.c -o $(STRING_POOL_TEST)
-	$(CC) $(CFLAGS) tests/test_vh_parse_group_key.c src/vh_parse.c src/vh_csv.c src/vh_string_pool.c src/vh_memtrack.c -o $(PARSE_GROUP_KEY_TEST)
-	powershell -NoProfile -Command "$$p='$(STRING_POOL_TEST).exe'; if (!(Test-Path -LiteralPath $$p)) { $$p='$(STRING_POOL_TEST)' }; $$p=(Resolve-Path -LiteralPath $$p).Path; & $$p; if ($$LASTEXITCODE -ne 0) { exit $$LASTEXITCODE }"
-	powershell -NoProfile -Command "$$p='$(PARSE_GROUP_KEY_TEST).exe'; if (!(Test-Path -LiteralPath $$p)) { $$p='$(PARSE_GROUP_KEY_TEST)' }; $$p=(Resolve-Path -LiteralPath $$p).Path; & $$p; if ($$LASTEXITCODE -ne 0) { exit $$LASTEXITCODE }"
-	powershell -NoProfile -ExecutionPolicy Bypass -File tests/run_milestone4_tests.ps1
+	cmd /C tests\\run_tests_windows.bat
 else
-	$(CC) $(CFLAGS) tests/test_vh_string_pool.c src/vh_string_pool.c src/vh_memtrack.c -o $(STRING_POOL_TEST)
-	$(CC) $(CFLAGS) tests/test_vh_parse_group_key.c src/vh_parse.c src/vh_csv.c src/vh_string_pool.c src/vh_memtrack.c -o $(PARSE_GROUP_KEY_TEST)
 	./$(STRING_POOL_TEST)
 	./$(PARSE_GROUP_KEY_TEST)
 	./$(TARGET) --select tests/filenames_basic.txt --profile default > test_output/basic_select.txt
@@ -90,14 +107,28 @@ else
 	./$(TARGET) --report tests/filenames_special_report_only.txt --profile default > test_output/special_report_only.txt
 endif
 
+test-build: $(TARGET) $(TEST_BINS)
+
+$(STRING_POOL_TEST): tests/test_vh_string_pool.c src/vh_string_pool.c src/vh_memtrack.c
+	$(CC) $(CFLAGS) tests/test_vh_string_pool.c src/vh_string_pool.c src/vh_memtrack.c -o $(STRING_POOL_TEST)
+
+$(PARSE_GROUP_KEY_TEST): tests/test_vh_parse_group_key.c src/vh_parse.c src/vh_csv.c src/vh_string_pool.c src/vh_memtrack.c
+	$(CC) $(CFLAGS) tests/test_vh_parse_group_key.c src/vh_parse.c src/vh_csv.c src/vh_string_pool.c src/vh_memtrack.c -o $(PARSE_GROUP_KEY_TEST)
+
 varianttest-amiga: $(AMIGA_BIN)
 
 $(AMIGA_BIN): $(AMIGA_OBJS)
-	$(AMIGA_MKDIR_BIN)
 	$(AMIGA_CC) $(AMIGA_LDFLAGS) -o $@ $^
 
-$(AMIGA_BUILD_DIR)/%.o: src/%.c
+$(AMIGA_BUILD_DIR):
 	$(AMIGA_MKDIR_BUILD)
+
+../../Bin/Amiga:
+	$(AMIGA_MKDIR_BIN)
+
+$(AMIGA_BIN): | ../../Bin/Amiga
+
+$(AMIGA_BUILD_DIR)/%.o: src/%.c | $(AMIGA_BUILD_DIR)
 	$(AMIGA_CC) $(AMIGA_CFLAGS) -c $< -o $@
 
 ifeq ($(OS),Windows_NT)
