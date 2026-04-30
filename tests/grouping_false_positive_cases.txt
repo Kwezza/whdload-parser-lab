@@ -1,0 +1,9 @@
+# Distinct-but-related names must not collapse into one group
+AlienBreed_v1.0_En.lha
+AlienBreed2_v1.0_En.lha
+AlienBreedSE_v1.0_En.lha
+AlienBreedSpecialEdition_v1.0_En.lha
+Lotus2_v1.0_En.lha
+LotusTurboChallenge2_v1.0_En.lha
+SomeGameDemo_v1.0_En.lha
+SomeGameDataDisk_v1.0_En.lha

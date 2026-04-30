@@ -1,0 +1,6 @@
+field: Memory
+token: SlowMem
+matched: yes
+id: 15
+canonical: SlowMem
+description: May require slow RAM (A500 trapdoor)

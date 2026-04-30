@@ -1,0 +1,9 @@
+# Pass B resolve smoke cases
+# Format: field,token,expected_match,notes
+Memory,1MbChip,yes,exact token match
+Memory,slow,yes,case-insensitive alias fallback
+Language,Fr,yes,language token
+Chipset,AGA,yes,chipset token
+Video,pal,yes,case-insensitive fallback
+Media,Disk,yes,media token
+Memory,NotARealToken,no,missing token handling

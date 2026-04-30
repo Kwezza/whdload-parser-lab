@@ -1,0 +1,11 @@
+# duplicate group: alienbreed
+AlienBreed_v1.3_AGA_Fr_PAL_1MbChip.lha
+AlienBreed_v1.3_OCS_En_PAL_1MbChip.lha
+AlienBreed_v1.3_AGA_En_NTSC_1MbChip.lha
+
+# singleton group
+AlienBreed2_v1.0_AGA_En.lha
+
+# report-only special visibility check in duplicate group
+aGame_v1.0_En_Enhanced.lha
+aGame_v1.0_En.lha

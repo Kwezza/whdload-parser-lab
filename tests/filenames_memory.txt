@@ -1,0 +1,17 @@
+# Memory token coverage
+MemTokenGame_v1.0_512k.lha
+MemTokenGame_v1.0_512KB.lha
+MemTokenGame_v1.0_1MB.lha
+MemTokenGame_v1.0_1Mb.lha
+MemTokenGame_v1.0_1MBChip.lha
+MemTokenGame_v1.0_1MbChip.lha
+MemTokenGame_v1.0_1.5MB.lha
+MemTokenGame_v1.0_2MB.lha
+MemTokenGame_v1.0_8MB.lha
+MemTokenGame_v1.0_12MB.lha
+MemTokenGame_v1.0_15MB.lha
+MemTokenGame_v1.0_LowMem.lha
+MemTokenGame_v1.0_SlowMem.lha
+MemTokenGame_v1.0_Slow.lha
+MemTokenGame_v1.0_Fast.lha
+MemTokenGame_v1.0_Chip.lha

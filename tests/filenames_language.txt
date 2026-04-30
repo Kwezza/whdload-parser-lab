@@ -1,0 +1,6 @@
+# Compact and direct language token coverage
+GameA_v1.0_Fr.lha
+GameA_v1.0_En.lha
+GameA_v1.0_FrDeEn.lha
+GameB_v1.0_EnDe.lha
+GameB_v1.0_En.lha

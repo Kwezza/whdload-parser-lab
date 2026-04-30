@@ -1,0 +1,4 @@
+# Singleton candidate that should be rejected by profile special exclude
+OnlyGameCensored_v1.0_AGA_En_Censored.lha
+# Singleton candidate that should be rejected by profile video exclude
+OnlyGameNTSC_v1.0_AGA_En_NTSC.lha

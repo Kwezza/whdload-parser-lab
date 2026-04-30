@@ -1,0 +1,11 @@
+# Special tags should be visible in report while weight.special=0
+SpecialGame_v1.0_AGA_En_Enhanced.lha
+SpecialGame_v1.0_AGA_En_UltimateEdition.lha
+SpecialGame_v1.0_AGA_En_Censored.lha
+SpecialGame_v1.0_AGA_En_Uncensored.lha
+SpecialGame_v1.0_AGA_En_NoMusic.lha
+SpecialGame_v1.0_AGA_En_NoSpeech.lha
+SpecialGame_v1.0_AGA_En_BETA.lha
+SpecialGame_v1.0_AGA_En_PreRelease.lha
+SpecialGame_v1.0_AGA_En_68020.lha
+SpecialGame_v1.0_AGA_En_68060.lha

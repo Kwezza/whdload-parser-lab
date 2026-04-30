@@ -1,0 +1,8 @@
+# Milestone 2 parse smoke cases
+# One filename per line
+AlienBreed_v1.3_AGA_1MbChip_FrDeEn_PAL.lha
+AlienBreed_v1.3_OCS_En.lha
+AlienBreed2_v1.0_AGA_En.lha
+GameDemo_v1.0.lha
+Game_v1.0_EnFrEs_Enhanced.lzx
+UnknownGame_v2.1_MysteryToken.lha

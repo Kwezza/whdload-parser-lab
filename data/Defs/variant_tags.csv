@@ -1,0 +1,28 @@
+ID,Name,Pretty
+1,Files,Files
+2,Image,Image
+3,NoMusic,No Music
+4,Audios,Audios
+5,NoVoice,No Voice
+6,Aminet,Aminet
+7,Repacked,Repacked
+8,MT32,MT32 (MIDI)
+9,Hr,Hr
+10,NoIntro,No Intro
+11,Uncensored,Uncensored
+12,Censored,Censored
+13,A1200Version,A1200Version
+14,NONAGA,NONAGA
+15,AltVersion,Alt Version
+16,AltLevels,Alt Levels
+17,DOS,DOS
+18,HighDensity,High Density
+19,A1000,A1000
+20,EarlyBuild,Early Build
+21,HiRes,Hi Res
+22,LoRes,Lo Res
+23,NoMovie,No Movie
+24,Crunched,Crunched
+25,NoSpeech,No Speech
+26,AVI,AVI
+27,Kernal_Version,Kernal Version

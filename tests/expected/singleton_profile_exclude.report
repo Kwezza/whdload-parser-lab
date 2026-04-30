@@ -1,0 +1,43 @@
+Group: onlygamecensored
+Selected:
+  none
+Skipped:
+  OnlyGameCensored_v1.0_AGA_En_Censored.lha  score=0  rejected (special: special excluded by profile token 'Censored')
+Recognised special tags:
+  Censored
+Unknown tokens:
+  none
+
+Group: onlygamentsc
+Selected:
+  none
+Skipped:
+  OnlyGameNTSC_v1.0_AGA_En_NTSC.lha  score=0  rejected (video: video excluded by profile token 'NTSC')
+Recognised special tags:
+  none
+Unknown tokens:
+  none
+
+Memory estimate:
+  candidate_count: 2
+  average_filename_length: 37.00
+  candidate_struct_size_bytes: 160
+  candidate_lite_struct_size_bytes: 20
+  id_list_struct_size_bytes: 18
+  parsed_name_old_struct_size_bytes: 4380
+  parsed_score_struct_size_bytes: 110
+  candidate_lite_array_bytes: 40
+  candidate_full_array_bytes: 320
+  order_array_bytes: 8
+  parsed_token_count: 6
+  parsed_token_storage_estimate_bytes: 408
+  string_pool_bytes: 107
+  csv_storage_estimate_bytes: 4733
+  temporary_parse_struct_size_bytes: 110
+  largest_duplicate_group_size: 1
+  temporary_parse_peak_estimate_bytes: 110
+  estimated_selector_peak_bytes: 155
+  peak_memory_estimate_bytes: 5576
+  old_model_estimate_bytes_if_available: 14965
+  reduction_vs_old_model_percent: 62.74
+

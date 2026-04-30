@@ -1,0 +1,6 @@
+# Watchlist for risky grouping behavior
+Game_v1.0.lha
+GameDemo_v1.0.lha
+Game2_v1.0.lha
+GameDataDisk_v1.0.lha
+GameEditor_v1.0.lha

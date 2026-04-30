@@ -1,0 +1,4 @@
+# Basic grouping: AlienBreed variants should group, AlienBreed2 should remain separate
+AlienBreed_v1.3_AGA_En.lha
+AlienBreed_v1.3_OCS_En.lha
+AlienBreed2_v1.0_AGA_En.lha

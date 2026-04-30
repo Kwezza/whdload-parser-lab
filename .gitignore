@@ -1,0 +1,5 @@
+variant_harness
+variant_harness.exe
+src/*.o
+test_output/*
+!test_output/.keep
