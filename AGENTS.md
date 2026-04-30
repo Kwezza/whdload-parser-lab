@@ -31,16 +31,18 @@ Notes:
 
 ## Source Map
 
-- CLI entrypoint (host): `src/main.c`
-- CLI entrypoint (Amiga): `src/amiga_varianttest.c`
-- CSV loading/lookup: `src/vh_csv.c`, `src/vh_csv.h`
-- Filename parsing/token detection: `src/vh_parse.c`, `src/vh_parse.h`
-- Grouping/select winner per group: `src/vh_group.c`, `src/vh_group.h`
-- Profile loading + weights: `src/vh_profile.c`, `src/vh_profile.h`
-- Scoring: `src/vh_score.c`, `src/vh_score.h`
-- Field registry metadata: `src/vh_fields.c`, `src/vh_fields.h`
-- String dedupe pool: `src/vh_string_pool.c`, `src/vh_string_pool.h`
-- Allocation tracking: `src/vh_memtrack.c`, `src/vh_memtrack.h`
+- Core engine folder: `src/core/`
+- Harness folder: `src/harness/`
+- CLI entrypoint (host): `src/harness/main.c`
+- CLI entrypoint (Amiga): `src/harness/amiga_varianttest.c`
+- CSV loading/lookup: `src/core/vh_csv.c`, `src/core/vh_csv.h`
+- Filename parsing/token detection: `src/core/vh_parse.c`, `src/core/vh_parse.h`
+- Grouping/select winner per group: `src/core/vh_group.c`, `src/core/vh_group.h`
+- Profile loading + weights: `src/core/vh_profile.c`, `src/core/vh_profile.h`
+- Scoring: `src/core/vh_score.c`, `src/core/vh_score.h`
+- Field registry metadata: `src/core/vh_fields.c`, `src/core/vh_fields.h`
+- String dedupe pool: `src/core/vh_string_pool.c`, `src/core/vh_string_pool.h`
+- Allocation tracking: `src/core/vh_memtrack.c`, `src/core/vh_memtrack.h`
 
 ## Conventions That Matter
 

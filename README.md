@@ -11,6 +11,16 @@ The code is kept separate from WHDFetch so the parsing and selection logic can b
 
 The project currently builds both a host-side test harness and a small Amiga CLI test program. The host harness is used for fast development and regression testing, while the Amiga harness is used to check whether the compact selector is practical on real or emulated Amiga hardware.
 
+## Source Layout
+
+- `src/core/`
+  - Parsing, grouping, profile, scoring, CSV, memory tracking, and shared utilities.
+  - This folder is the portable engine code intended for constrained Amiga targets.
+- `src/harness/`
+  - Host and Amiga executable entrypoints and harness-only orchestration.
+- `tests/`
+  - Unit tests and regression scripts only.
+
 ## whdload-parser-lab
 
 Isolated lab for WHDLoad filename parsing, grouping, profile selection, and Amiga harness validation.
@@ -139,7 +149,7 @@ Output binary:
 
 Run the binary from a location that can access profiles/defs and DAT input file.
 
-`src/amiga_varianttest.c` resolves defaults from:
+`src/harness/amiga_varianttest.c` resolves defaults from:
 
 - defs dir candidates (for CSVs):
   - `data/Defs`

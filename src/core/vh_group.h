@@ -58,8 +58,6 @@ typedef struct VhCandidateList {
 int vh_group_load_candidates(VhCandidateList *list, const char *listfile, const VhParseContext *ctx);
 void vh_group_free_candidates(VhCandidateList *list);
 int vh_group_select_best(VhCandidateList *list, const VhProfile *profile);
-void vh_group_print_selected(const VhCandidateList *list);
-void vh_group_print_report(const VhCandidateList *list);
 void vh_group_calculate_stats(const VhCandidateList *list,
                               int *out_group_count,
                               int *out_duplicate_group_count,

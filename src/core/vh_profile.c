@@ -187,25 +187,30 @@ static int vh_profile_field_from_section(const char *section, VhProfileField *ou
     return 0;
 }
 
-static void vh_profile_print_unresolved(const VhProfile *profile)
+static int vh_build_weight_key(VhProfileField field, char *out_key, size_t out_key_size)
 {
-    int i;
+    const char *field_name;
+    size_t prefix_len;
+    size_t field_len;
 
-    for (i = 0; i < VH_PROFILE_FIELD_COUNT; ++i) {
-        int j;
-        const VhIdList *inc = &profile->rules[i].include;
-        const VhIdList *exc = &profile->rules[i].exclude;
-
-        for (j = 0; j < inc->unresolved_count; ++j) {
-            fprintf(stderr, "Warning: unresolved include token for %s: %s\n",
-                vh_profile_field_name((VhProfileField)i), inc->unresolved[j]);
-        }
-
-        for (j = 0; j < exc->unresolved_count; ++j) {
-            fprintf(stderr, "Warning: unresolved exclude token for %s: %s\n",
-                vh_profile_field_name((VhProfileField)i), exc->unresolved[j]);
-        }
+    if (out_key == NULL || out_key_size == 0U) {
+        return 0;
     }
+
+    field_name = vh_profile_field_name(field);
+    if (field_name == NULL) {
+        return 0;
+    }
+
+    prefix_len = strlen("weight.");
+    field_len = strlen(field_name);
+    if (prefix_len + field_len + 1U > out_key_size) {
+        return 0;
+    }
+
+    memcpy(out_key, "weight.", prefix_len);
+    memcpy(out_key + prefix_len, field_name, field_len + 1U);
+    return 1;
 }
 
 int vh_profile_load(VhProfile *profile, const char *path, const VhParseContext *ctx)
@@ -265,7 +270,9 @@ int vh_profile_load(VhProfile *profile, const char *path, const VhParseContext *
             int i;
             for (i = 0; i < VH_PROFILE_FIELD_COUNT; ++i) {
                 char key[64];
-                snprintf(key, sizeof(key), "weight.%s", vh_profile_field_name((VhProfileField)i));
+                if (!vh_build_weight_key((VhProfileField)i, key, sizeof(key))) {
+                    continue;
+                }
                 if (vh_stricmp(line, key) == 0) {
                     profile->rules[i].weight = atoi(eq);
                     break;
@@ -288,7 +295,6 @@ int vh_profile_load(VhProfile *profile, const char *path, const VhParseContext *
     }
 
     fclose(fp);
-    vh_profile_print_unresolved(profile);
     return 1;
 }
 

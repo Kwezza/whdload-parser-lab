@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "../src/vh_parse.h"
+#include "../src/core/vh_parse.h"
 
 typedef struct VhCase {
     const char *archive_name;

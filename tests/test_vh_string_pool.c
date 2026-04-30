@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../src/vh_string_pool.h"
+#include "../src/core/vh_string_pool.h"
 
 static int expect_true(int condition, const char *label)
 {

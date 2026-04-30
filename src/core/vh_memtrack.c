@@ -294,59 +294,40 @@ void vh_free(void *ptr)
     free(header);
 }
 
-void vh_memtrack_print_summary(FILE *out,
-                               const char *mode_name,
-                               int candidate_count,
-                               int selected_count,
-                               int group_count,
-                               int duplicate_group_count,
-                               int largest_duplicate_group_size,
-                               unsigned long current_before_cleanup,
-                               const VhMemtrackStats *final_stats)
+void vh_memtrack_get_report(VhMemtrackReport *out_report)
 {
-    const char *mode_text;
+    unsigned short i;
 
-    if (out == NULL || final_stats == NULL) {
+    if (out_report == NULL) {
         return;
     }
 
-    mode_text = (mode_name != NULL) ? mode_name : "unknown";
+    memset(out_report, 0, sizeof(*out_report));
 
-    fprintf(out, "Memory trace:\n");
-    fprintf(out, "  mode: %s\n", mode_text);
-    fprintf(out, "  candidate_count: %d\n", candidate_count);
-    fprintf(out, "  selected_count: %d\n", selected_count);
-    fprintf(out, "  group_count: %d\n", group_count);
-    fprintf(out, "  duplicate_group_count: %d\n", duplicate_group_count);
-    fprintf(out, "  largest_duplicate_group_size: %d\n", largest_duplicate_group_size);
-    fprintf(out, "  actual_peak_heap_bytes: %lu\n", final_stats->actual_peak_heap_bytes);
-    fprintf(out, "  actual_current_heap_bytes: %lu\n", current_before_cleanup);
-    fprintf(out, "  actual_current_heap_bytes_after_cleanup: %lu\n", final_stats->actual_current_heap_bytes);
-    fprintf(out, "  allocation_count: %lu\n", final_stats->allocation_count);
-    fprintf(out, "  free_count: %lu\n", final_stats->free_count);
-    fprintf(out, "  realloc_count: %lu\n", final_stats->realloc_count);
-    fprintf(out, "  largest_single_allocation_bytes: %lu\n", final_stats->largest_single_allocation_bytes);
-    fprintf(out, "  largest_single_allocation_tag: %s\n", vh_get_tag_name(g_largest_tag_index));
-    fprintf(out, "  largest_single_allocation_operation: %s\n", g_largest_operation);
-    fprintf(out, "  largest_single_allocation_is_payload_only: yes\n");
-    fprintf(out, "  failed_allocation_count: %lu\n", final_stats->failed_allocation_count);
-    fprintf(out, "  all_tracked_allocations_freed: %s\n", vh_memtrack_all_allocations_freed() ? "yes" : "no");
+    strncpy(out_report->largest_single_allocation_tag,
+            vh_get_tag_name(g_largest_tag_index),
+            sizeof(out_report->largest_single_allocation_tag) - 1U);
+    out_report->largest_single_allocation_tag[sizeof(out_report->largest_single_allocation_tag) - 1U] = '\0';
 
-    if (g_tag_count > 0U) {
-        unsigned short i;
-        fprintf(out, "  allocations_by_tag:\n");
-        for (i = 0; i < g_tag_count; ++i) {
-            const VhTagStats *tag = &g_tag_stats[i];
-            if ((tag->malloc_count + tag->realloc_count) == 0UL) {
-                continue;
-            }
-            fprintf(out,
-                    "    %s: malloc=%lu realloc=%lu peak_bytes=%lu current_bytes=%lu\n",
-                    tag->name,
-                    tag->malloc_count,
-                    tag->realloc_count,
-                    tag->peak_bytes,
-                    tag->current_bytes);
-        }
+    strncpy(out_report->largest_single_allocation_operation,
+            g_largest_operation,
+            sizeof(out_report->largest_single_allocation_operation) - 1U);
+    out_report->largest_single_allocation_operation[sizeof(out_report->largest_single_allocation_operation) - 1U] = '\0';
+
+    out_report->tag_count = g_tag_count;
+    if (out_report->tag_count > (unsigned short)VH_MEMTRACK_MAX_TAGS) {
+        out_report->tag_count = (unsigned short)VH_MEMTRACK_MAX_TAGS;
+    }
+
+    for (i = 0; i < out_report->tag_count; ++i) {
+        const VhTagStats *tag = &g_tag_stats[i];
+        VhMemtrackTagSnapshot *snapshot = &out_report->tags[i];
+
+        strncpy(snapshot->name, tag->name, sizeof(snapshot->name) - 1U);
+        snapshot->name[sizeof(snapshot->name) - 1U] = '\0';
+        snapshot->malloc_count = tag->malloc_count;
+        snapshot->realloc_count = tag->realloc_count;
+        snapshot->current_bytes = tag->current_bytes;
+        snapshot->peak_bytes = tag->peak_bytes;
     }
 }

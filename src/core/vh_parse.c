@@ -1,7 +1,6 @@
 #include "vh_parse.h"
 
 #include <ctype.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -48,10 +47,22 @@ static int vh_safe_copy(char *dst, size_t dst_size, const char *src)
 static int vh_load_single_csv(VhCsvFile *csv, const char *defs_dir, const char *file_name)
 {
     char path[VH_PATH_MAX];
+    size_t dir_len;
+    size_t file_len;
 
-    if (snprintf(path, sizeof(path), "%s/%s", defs_dir, file_name) >= (int)sizeof(path)) {
+    if (defs_dir == NULL || file_name == NULL) {
         return 0;
     }
+
+    dir_len = strlen(defs_dir);
+    file_len = strlen(file_name);
+    if (dir_len + 1U + file_len + 1U > sizeof(path)) {
+        return 0;
+    }
+
+    memcpy(path, defs_dir, dir_len);
+    path[dir_len] = '/';
+    memcpy(path + dir_len + 1U, file_name, file_len + 1U);
 
     return vh_csv_load(csv, path);
 }

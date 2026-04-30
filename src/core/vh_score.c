@@ -1,8 +1,43 @@
 #include "vh_score.h"
 
 #include <stddef.h>
-#include <stdio.h>
 #include <string.h>
+
+static void vh_append_text(char *dst, size_t dst_size, const char *src)
+{
+    size_t dst_len;
+    size_t copy_len;
+
+    if (dst == NULL || src == NULL || dst_size == 0U) {
+        return;
+    }
+
+    dst_len = strlen(dst);
+    if (dst_len >= dst_size - 1U) {
+        return;
+    }
+
+    copy_len = strlen(src);
+    if (copy_len > (dst_size - 1U) - dst_len) {
+        copy_len = (dst_size - 1U) - dst_len;
+    }
+
+    memcpy(dst + dst_len, src, copy_len);
+    dst[dst_len + copy_len] = '\0';
+}
+
+static void vh_set_reject_reason(char *dst, size_t dst_size, const char *field_name, const char *token_text)
+{
+    if (dst == NULL || dst_size == 0U) {
+        return;
+    }
+
+    dst[0] = '\0';
+    vh_append_text(dst, dst_size, field_name);
+    vh_append_text(dst, dst_size, " excluded by profile token '");
+    vh_append_text(dst, dst_size, token_text);
+    vh_append_text(dst, dst_size, "'");
+}
 
 static const VhTokenIdList *vh_parsed_list_for_field(const VhParsedScoreName *parsed, VhProfileField field)
 {
@@ -144,8 +179,8 @@ void vh_score_candidate(const VhParsedScoreName *parsed,
             if (vh_idlist_contains(&rule->exclude, (int)tokens->ids[i])) {
                 out->rejected = 1;
                 out->reject_code = vh_reject_code_for_field((VhProfileField)field_index);
-                snprintf(out->reject_reason, sizeof(out->reject_reason),
-                    "%s excluded by profile token '%s'",
+                vh_set_reject_reason(out->reject_reason,
+                    sizeof(out->reject_reason),
                     vh_profile_field_name((VhProfileField)field_index),
                     vh_lookup_token_text(ctx, (VhProfileField)field_index, (int)tokens->ids[i]));
                 return;
