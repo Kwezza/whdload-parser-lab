@@ -1,51 +1,189 @@
-# dat_to_tlv Standalone Tool
+# dat_to_tlv
 
-This folder contains a standalone DAT-to-TLV tool that can now be built for both host and Amiga targets using only the files staged inside `variant_backport_staging`.
+WHDLoad archive names contain a surprising amount of useful information. A single game may exist as several archive variants: OCS, ECS, AGA, CD32, PAL, NTSC, different memory requirements, different languages, low-memory builds, enhanced editions, censored/uncensored editions, and other special cases.
 
-## What It Does
+For a simple downloader this creates a problem. If every matching archive is downloaded, the user can end up with several versions of the same game. That makes the collection larger, messier, and less tailored to the Amiga it is intended to run on. For example, a French user with an AGA Amiga and 8 MB of RAM may want French AGA versions where available, but fall back to English, OCS/ECS, or lower-memory versions where no better match exists.
 
-`dat_to_tlv`:
-- reads a Logiqx-style DAT file
-- extracts each `<rom name="..."/>` filename
-- parses each filename through the staged TLV filename pipeline
-- writes one aggregate TLV output file
+This repository is an isolated testbed for solving that problem. It experiments with parsing WHDLoad archive filenames, recognising useful tokens, grouping likely variants of the same title, and applying profile-based selection rules to choose the best candidate from each group.
 
-Current default input:
-- `assets_raw/Games(19-05-2025).dat`
+The code is kept separate from WHDFetch so the parsing and selection logic can be tested, profiled, and simplified before being integrated into the main downloader. This is especially important for classic Amiga targets, where memory use, CPU time, and allocation behaviour matter much more than they do on a modern PC.
 
-Current default output:
-- `output/Games(19-05-2025).tlv`
+The project currently builds both a host-side test harness and a small Amiga CLI test program. The host harness is used for fast development and regression testing, while the Amiga harness is used to check whether the compact selector is practical on real or emulated Amiga hardware.
+
+## What The Tool Does
+
+The current executable converts a Logiqx-style DAT file into one aggregate TLV file.
+
+At a high level the built tool does this:
+
+1. Reads the DAT XML file.
+2. Extracts each `<rom name="..."/>` filename.
+3. Parses each filename into structured metadata fields.
+4. Validates tokens against CSV lookup tables.
+5. Writes one binary TLV stream containing all parsed records.
+
+Default paths baked into the executable:
+
+- DAT input: `assets_raw/Games(19-05-2025).dat`
+- TLV output: `output/Games(19-05-2025).tlv`
+- CSV definitions: `assets_raw/defs`
+- Pack type configuration: `assets_raw/prefs/pack_types.ini`
+
+## Pipeline Overview
+
+The code that is actually built by the current `Makefile` implements this path:
+
+```text
+DAT parser -> filename processor -> CSV/token validation -> dynamic field registry -> TLV writer
+```
+
+The main ownership split is:
+
+- `app_src/`: standalone program entry point and minimal DAT parsing.
+- `src_raw/`: active TLV pipeline logic and related support modules extracted from the parent project.
+- `src/`: stable platform wrappers and utility code used by the pipeline.
+- `include_raw/` and `include/`: public headers for those two source trees.
+
+## Folder Map
+
+### Root
+
+- `Makefile`: defines the host and Amiga builds and lists the source files that are currently compiled.
+- `README.md`: project overview and folder ownership map.
+- `AGENTS.md`: repository-specific instructions for coding agents.
+- `benchmark-summary*.txt`: saved benchmark output from earlier runs.
+- `dat_to_tlv`: checked-in binary/artifact from prior work.
+
+### `app_src/`
+
+This is the standalone harness layer for the converter.
+
+- `main.c`: the real entry point for the tool. It parses command-line arguments, initializes logging, loads the DAT filenames, starts the TLV session, aggregates results, writes the output file, and prints benchmark/summary information.
+- `dat_parser_minimal.c` and `dat_parser_minimal.h`: a deliberately small DAT reader that scans the XML and extracts `<rom name="...">` attributes into an in-memory filename list. This is the first stage of the current pipeline.
+
+### `src_raw/`
+
+This folder contains the extracted feature code that actually understands WHDLoad naming and TLV generation. It is the most important folder for the conversion system.
+
+Modules used by the current build:
+
+- `filename_processor.c`: the filename orchestration engine. It sanitizes raw names, tokenizes them, detects language/version patterns, matches tokens against CSV data, and emits typed fields into a TLV record.
+- `field_registry.c`: builds the runtime field registry from `pack_types.ini`. Field IDs are assigned dynamically here, which is why the TLV writer can embed a metadata map instead of relying on fixed numeric IDs.
+- `csv_cache.c`: loads and caches CSV lookup tables from `assets_raw/defs`, performs fast token lookups, and handles CSV-backed metadata validation.
+- `tlv_builder.c`: owns TLV record allocation, entry insertion, metadata-map writing, aggregate file writing, and batch/session processing.
+- `error_handling.c`: shared error container and formatting helpers used across the processing pipeline.
+- `tlv_profile.c`: optional profiling instrumentation used when building with `PROFILE=1`.
+- `slug_util.c`: helper routines for slug-like string handling used by the extracted pipeline code.
+
+Modules present in the repo but not compiled by the current `Makefile`:
+
+- `variant_iterator.c` and `variant_index.c`: interpret an aggregate TLV record as a sequence of variant records and build searchable per-variant descriptors.
+- `active_set.c`: bitmap-based selection/filtering state over variant indices.
+- `filter_profile.c`: builds weighted include/exclude scoring rules from preferences and field defaults.
+- `filter_pipeline.c`: higher-level filter pipeline that combines indexing, active-set filtering, search, and score ordering.
+- `filter_runtime.c`: runtime wrapper for loading a TLV snapshot, reconstructing field mappings, loading a profile, and scoring variants.
+- `profile_loader.c`: profile file loader for the staged selector/filter configuration.
+
+That second group is support code for the planned variant-selection system. It matters to the broader TLV workflow, but it is not part of the executable produced by the current `Makefile` yet.
+
+### `src/`
+
+This folder holds reusable support code that the TLV pipeline depends on rather than domain-specific parsing logic.
+
+- `platform/platform_io.c`: cross-platform wrappers for file I/O, directory scanning, directory creation, and similar filesystem operations on host and Amiga.
+- `platform/platform_string.c`: Amiga-compatible replacements for string helpers such as case-insensitive comparison and re-entrant tokenization.
+- `io/pack_types_loader.c`: strict parser and validator for `pack_types.ini`, including validation of field lists and pack metadata constraints.
+- `io/writeLog.c`: runtime logfile support used by the standalone tool and by the pipeline modules.
+- `utils/prettify.c`: display-name beautification and override loading used when raw archive names need a cleaner human-facing title.
+
+### `include/`
+
+Headers for the stable support layer in `src/`.
+
+- `platform.h`: platform-wide types, macros, and compile-time environment guards.
+- `platform/`: declarations for platform I/O and string helpers.
+- `io/`: declarations for logging.
+- `utils/`: declarations for helper utilities such as name prettification.
+- `tlv_filename/tlv_profile.h`: profiling interfaces shared with the pipeline.
+
+### `include_raw/`
+
+Headers for the extracted TLV and filter code in `src_raw/`.
+
+- `tlv_filename/`: declarations for the active DAT-to-TLV path, including the filename processor, CSV cache, error system, field registry, metadata handling, and TLV builder.
+- `filter/`: declarations for the staged variant indexing, filtering, and profile system.
+- `io/pack_types_loader.h`: interface shared with the runtime registry/pack-type code.
+
+### `assets_raw/`
+
+Runtime data files used by the converter and by the staged filter system.
+
+- `defs/`: CSV lookup tables. These map tokens such as chipset, memory, language, video, media, and contributor tags to numeric IDs and canonical meanings.
+- `prefs/pack_types.ini`: the configuration that defines pack types and which fields are active in the registry.
+- `prefs/prefs.ini`: broader preferences used by staged filtering/profile code.
+- `profiles/`: profile definitions for future variant filtering and ranking work.
+
+These assets are not just reference material. The pipeline depends on them at runtime.
+
+### `output/`
+
+Generated TLV files and captured benchmark outputs from local runs. This is where the default conversion output is written.
+
+### `docs/`
+
+Project notes, handover documents, and benchmark analysis. This is the best place to look for known runtime issues, performance observations, and milestone context.
+
+### `notes/`
+
+Backport and staging notes. In particular, `backport_inventory.md` explains which extracted files are required for Milestone 1 versus later selector work.
+
+## Which Code Is Responsible For TLV Creation
+
+If you want to understand the current converter end-to-end, these are the key pieces in order:
+
+1. `app_src/main.c`
+	Orchestrates the run, owns CLI/default paths, and calls into the TLV session API.
+2. `app_src/dat_parser_minimal.c`
+	Extracts archive filenames from the DAT.
+3. `src/io/pack_types_loader.c`
+	Reads `pack_types.ini`, which defines what fields exist and how pack types behave.
+4. `src_raw/field_registry.c`
+	Turns those field definitions into the runtime registry used throughout the pipeline.
+5. `src_raw/csv_cache.c`
+	Loads and caches the token definition CSV files.
+6. `src_raw/filename_processor.c`
+	Converts a raw archive name into typed metadata fields.
+7. `src_raw/tlv_builder.c`
+	Stores those fields as TLV entries and writes the final aggregate file.
+8. `src/platform/*` and `src/io/writeLog.c`
+	Provide the filesystem, string, and logging support that makes the same logic run on both host and Amiga targets.
 
 ## Build
 
-From inside `variant_backport_staging`:
+The Makefile uses `cmd` as its shell. Do not use PowerShell inside the Makefile rules.
+
+Build the host version:
 
 ```bat
 make
 ```
 
-This builds the host version by default:
-
-```text
-build/host/dat_to_tlv.exe
-```
-
-Build the host version explicitly:
+Explicit host build:
 
 ```bat
 make TARGET=host
 ```
 
-Build the Amiga version:
+Amiga build:
 
 ```bat
 make TARGET=amiga
 ```
 
-This builds:
+Enable TLV profiling instrumentation:
 
-```text
-build/amiga/dat_to_tlv
+```bat
+make PROFILE=1
 ```
 
 Shortcut targets:
@@ -53,110 +191,72 @@ Shortcut targets:
 ```bat
 make host
 make amiga
-```
-
-Show build help:
-
-```bat
+make run
+make clean
 make help
 ```
 
-To clean the host build and generated default TLV file:
+Build outputs:
 
-```bat
-make clean
-```
+- `build/host/dat_to_tlv.exe`
+- `build/amiga/dat_to_tlv`
 
 ## Run
 
-From inside `variant_backport_staging`:
+Run the host build directly:
 
 ```bat
 build\host\dat_to_tlv.exe
 ```
 
-This uses the built-in defaults:
-- DAT path: `assets_raw/Games(19-05-2025).dat`
-- output path: `output/Games(19-05-2025).tlv`
-- CSV defs path: `assets_raw/defs`
-- pack types path: `assets_raw/prefs/pack_types.ini`
-
-You can also run through make:
+Or build and run via make:
 
 ```bat
 make run
 ```
 
-For the Amiga target, the Makefile builds the binary but does not try to execute it on the host machine.
-
-Important for Amiga runs:
-- before starting `dat_to_tlv`, manually raise the stack, for example `STACK 100000`
-- the tool now writes this same warning as the first runtime logfile note when logging is enabled
-
-## Command-Line Usage
+Command-line syntax:
 
 ```text
 dat_to_tlv[.exe] [--no-log] [dat_path output_path [csv_dir pack_types_ini]]
 ```
 
-Command-line options:
-- `--no-log` disables logfile creation and logfile writes for faster runs on Amiga and emulators
-
 Examples:
-
-Use defaults:
 
 ```bat
 build\host\dat_to_tlv.exe
-```
-
-Specify DAT and output only:
-
-```bat
 build\host\dat_to_tlv.exe assets_raw\Games(19-05-2025).dat output\games_test.tlv
-```
-
-Specify all paths explicitly:
-
-```bat
 build\host\dat_to_tlv.exe assets_raw\Games(19-05-2025).dat output\games_test.tlv assets_raw\defs assets_raw\prefs\pack_types.ini
-```
-
-Disable logging:
-
-```bat
 build\host\dat_to_tlv.exe --no-log
 ```
 
-Disable logging and specify paths:
-
-```bat
-build\host\dat_to_tlv.exe --no-log assets_raw\Games(19-05-2025).dat output\games_test.tlv assets_raw\defs assets_raw\prefs\pack_types.ini
-```
-
-## Expected Output
-
-A successful run prints a summary similar to:
+On Amiga, raise the stack before running, for example:
 
 ```text
-DAT input:    assets_raw/Games(19-05-2025).dat
-Output TLV:   output/Games(19-05-2025).tlv
-CSV folder:   assets_raw/defs
-Pack types:   assets_raw/prefs/pack_types.ini
-DAT entries:  3861
-Processed:    3861
-Successful:   3861
-Errors:       0
-TLV entries:  11634
+STACK 100000
 ```
 
-## Notes
+## Current Scope And Status
 
-- This started as a host-first standalone tool and now also builds as an Amiga target.
-- It builds and runs entirely from `variant_backport_staging`.
-- It does not require linking against source files outside this folder during the standalone build.
-- The current implementation writes one aggregate TLV file for the whole DAT.
-- The current implementation is focused on DAT-to-TLV conversion only. It does not yet perform profile-based filtering or variant scoring.
-- The Makefile does not use PowerShell in normal build rules.
-- On Amiga, use a manually increased stack such as `STACK 100000` before running the tool.
-- Use `--no-log` to suppress logfile output when logging overhead is too slow.
+- The current shipped build is focused on DAT-to-TLV conversion.
+- The repo already contains staged support code for variant grouping, filtering, and scoring, but that selector stack is not wired into the current build target yet.
+- Host builds work. The Amiga binary is known to crash at runtime and still needs investigation.
+- The runtime field registry is dynamic, so TLV files embed metadata that lets field IDs be reconstructed later.
+
+## Expected Summary Output
+
+Successful runs print a summary like this:
+
+```text
+DAT input:      assets_raw/Games(19-05-2025).dat
+Output TLV:     output/Games(19-05-2025).tlv
+CSV folder:     assets_raw/defs
+Pack types:     assets_raw/prefs/pack_types.ini
+DAT entries:    3861
+Processed:      3861
+Successful:     3861
+Errors:         0
+TLV entries:    11634
+TLV build time: <n> ms
+TLV save time:  <n> ms
+```
