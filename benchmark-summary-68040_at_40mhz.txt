@@ -1,0 +1,31 @@
+DAT input:    assets_raw/Games(19-05-2025).dat
+Output TLV:   output/Games(19-05-2025).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  3861
+Processed:    3861
+Successful:   3861
+Errors:       0
+TLV entries:  11634
+TLV build time: 166720 ms
+TLV save time: 1540 ms
+
+TLV pipeline profile (save excluded):
+session_init       calls=1      total=100      ms avg=100    ms max=100    ms share=  0.0%
+batch_total        calls=1      total=160440   ms avg=160440 ms max=160440 ms share=100.0%
+record_init        calls=3861   total=1380     ms avg=0      ms max=20     ms share=  0.8%
+process_filename   calls=3861   total=157400   ms avg=40     ms max=260    ms share= 98.1%
+sanitize           calls=3861   total=1140     ms avg=0      ms max=20     ms share=  0.7%
+prescan            calls=3861   total=103040   ms avg=26     ms max=100    ms share= 64.2%
+prescan_join       calls=48086  total=12980    ms avg=0      ms max=20     ms share=  8.0%
+prescan_lookup     calls=48086  total=57380    ms avg=1      ms max=60     ms share= 35.7%
+prescan_rebuild    calls=137    total=80       ms avg=0      ms max=20     ms share=  0.0%
+tokenize           calls=3861   total=4180     ms avg=1      ms max=20     ms share=  2.6%
+token_loop         calls=3861   total=38300    ms avg=9      ms max=220    ms share= 23.8%
+token_checks       calls=7657   total=12640    ms avg=1      ms max=20     ms share=  7.8%
+pack_field_match   calls=918    total=22220    ms avg=24     ms max=220    ms share= 13.8%
+unknown_token      calls=21     total=0        ms avg=0      ms max=0      ms share=  0.0%
+csv_lookup         calls=60758  total=52480    ms avg=0      ms max=60     ms share= 32.7%
+tlv_add_entry      calls=23268  total=6140     ms avg=0      ms max=40     ms share=  3.8%
+aggregate_merge    calls=1      total=6280     ms avg=6280   ms max=6280   ms share=  3.9%
+

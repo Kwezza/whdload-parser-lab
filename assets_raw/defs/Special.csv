@@ -1,0 +1,64 @@
+1,Name,Description
+2,1.1,Version 1.1
+3,68020,Requires 68020 CPU or higher
+4,68060,Requires 68060 CPU
+5,A1000,Compatible with Amiga 1000
+6,A1200Version,Special version for Amiga 1200
+7,A600Pack,Part of the A600 pack-in software
+8,AltLevels,Alternate levels included
+9,AltVersion,Alternate version of game
+10,AmigaLive,Modified for use with AmigaLive
+11,Aminet,Originally distributed via Aminet
+12,AtariST,Converted or influenced by Atari ST version
+13,Audios,Audio tracks included
+14,AVI,Includes AVI video or trailer
+15,BETA,Beta/test version
+16,by,Credit tag for author or creator
+17,Censored,Censored version of game
+18,ComicRelief,Charity-related release or edition
+19,CompilationArcadeAction,Part of Compilation: Arcade Action
+20,ControllableJump,Jump mechanics are controllable
+21,Crunched,Compressed (executable or files crunched)
+22,Decrunched,Uncompressed version
+23,DesktopDynamite,Part of the 'Desktop Dynamite' software bundle
+24,DizzyCollection,Part of a Dizzy game compilation
+25,DOS,MS-DOS or PC version reference
+26,EarlyBuild,Early/pre-release build
+27,EasyPlay,Simplified version or easier gameplay
+28,ECS,Optimized for Enhanced Chip Set
+29,EnFrDe,Supports English French and German
+30,EnFrEs,Supports English French and Spanish
+31,Enhanced,Enhanced version with improvements
+32,Files,Loose files rather than disk image
+33,fix,Minor fix or patch
+34,German,German language version
+35,HighDensity,Uses high-density disk format
+36,HiRes,Supports high resolution mode
+37,Hr,Possibly abbreviation for Hungarian
+38,Image,Disk image included
+39,January2025,Dated build or WHD release (Jan 2025)
+40,jump,Related to jump mechanics or modification
+41,Kernal,Refers to system kernel or a patch
+42,LoRes,Low resolution mode supported
+43,MegaPak,Part of a Mega Pak compilation
+44,MT32,Supports Roland MT-32 sound module
+45,NoIntro,Intro removed
+46,NoMovie,Movie sequences removed
+47,NoMusic,Music removed or disabled
+48,NONAGA,No NAGA protection or component
+49,NoSpeech,Speech removed or disabled
+50,NoVoice,Voice samples removed or disabled
+51,OCS,Original Chip Set compatible
+52,OldTileSet,Uses original/older tile graphics
+53,PreRelease,Pre-release build or version
+54,PublicDomain,Public domain software
+55,RemonsteredEdition,Updated/remastered edition
+56,Repacked,Repacked for WHDLoad or simplified
+57,Se,Possibly Swedish or 'Special Edition'
+58,Spanish,Spanish language version
+59,UltimateEdition,Ultimate or enhanced edition
+60,Uncensored,Uncensored version
+61,V1,Version 1
+62,V2,Version 2
+63,Version,Version-specific tag
+64,Torti-the-Smurf,Possibly a cracktro signature or alias

@@ -1,0 +1,16 @@
+1,Chip,Requires chip RAM
+2,Fast,Requires fast RAM
+3,512k,512KB RAM required
+4,512KB,512KB RAM required
+5,1MB,1MB RAM required
+6,1MBChip,1MB chip RAM required
+7,1Mb,1MB RAM required
+8,1MbChip,1MB chip RAM required
+9,1.5MB,1.5MB RAM required
+10,2MB,2MB RAM required
+11,8MB,8MB RAM required
+12,12MB,12MB RAM required
+13,15MB,15MB RAM required
+14,LowMem,Designed for low memory systems
+15,SlowMem,May require slow RAM (A500 trapdoor)
+15,Slow,May require slow RAM (A500 trapdoor)
