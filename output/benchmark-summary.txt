@@ -10,3 +10,35 @@ TLV entries:  11634
 TLV build time: 580 ms
 TLV save time: 20 ms
 
+DAT input:    assets_raw/Games(19-05-2025).dat
+Output TLV:   output/Games(19-05-2025).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  3861
+Processed:    3861
+Successful:   3861
+Errors:       0
+TLV entries:  11634
+TLV build time: 1579560 ms
+TLV save time: 1400 ms
+
+TLV pipeline profile (save excluded):
+session_init       calls=1      total=     120.000 ms avg=     120.000 ms max=     120.000 ms share=  0.0%
+batch_total        calls=1      total= 1572340.000 ms avg= 1572340.000 ms max= 1572340.000 ms share=100.0%
+record_init        calls=3861   total=    1020.000 ms avg=       0.264 ms max=      20.000 ms share=  0.0%
+process_filename   calls=3861   total= 1569220.000 ms avg=     406.428 ms max= 1026700.000 ms share= 99.8%
+sanitize           calls=3861   total=     980.000 ms avg=       0.253 ms max=      20.000 ms share=  0.0%
+prescan            calls=3861   total= 1135860.000 ms avg=     294.188 ms max= 1026580.000 ms share= 72.2%
+prescan_join       calls=48971  total=   12780.000 ms avg=       0.260 ms max=      20.000 ms share=  0.8%
+prescan_lookup     calls=48971  total=   59360.000 ms avg=       1.212 ms max=      20.000 ms share=  3.7%
+prescan_rebuild    calls=141    total=      40.000 ms avg=       0.283 ms max=      20.000 ms share=  0.0%
+tokenize           calls=3861   total=    4420.000 ms avg=       1.144 ms max=      20.000 ms share=  0.2%
+token_loop         calls=3861   total=  214700.000 ms avg=      55.607 ms max=   10000.000 ms share= 13.6%
+token_checks       calls=7653   total=  161680.000 ms avg=      21.126 ms max=   10000.000 ms share= 10.2%
+pack_field_match   calls=914    total=   49000.000 ms avg=      53.610 ms max=      80.000 ms share=  3.1%
+unknown_token      calls=21     total=      80.000 ms avg=       3.809 ms max=      20.000 ms share=  0.0%
+csv_lookup         calls=914    total=   19360.000 ms avg=      21.181 ms max=      40.000 ms share=  1.2%
+csv_lookup_loaded  calls=54056  total=   38540.000 ms avg=       0.712 ms max=      20.000 ms share=  2.4%
+tlv_add_entry      calls=23268  total=    6360.000 ms avg=       0.273 ms max=      40.000 ms share=  0.4%
+aggregate_merge    calls=1      total=    6600.000 ms avg=    6600.000 ms max=    6600.000 ms share=  0.4%
+

@@ -1,4 +1,4 @@
----
+  ---
 description: "Use when modifying dat_to_tlv C code, headers, Makefile rules, TLV pipeline modules, or project documentation. Covers repo architecture, build constraints, and what is currently in scope versus staged future work."
 name: "dat_to_tlv Codebase Conventions"
 applyTo: "README.md, AGENTS.md, Makefile, app_src/**, src/**, src_raw/**, include/**, include_raw/**, docs/**, notes/**"

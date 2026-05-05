@@ -17,6 +17,11 @@
 #if PLATFORM_AMIGA
 #include <dos/dos.h>
 #include <proto/dos.h>
+/* VBCC stack override: helps avoid late-exit crashes from stack exhaustion. */
+unsigned long __stack = 131072UL;
+#elif defined(_WIN32)
+__declspec(dllimport) int __stdcall QueryPerformanceCounter(long long *counter);
+__declspec(dllimport) int __stdcall QueryPerformanceFrequency(long long *frequency);
 #endif
 
 #define DEFAULT_DAT_PATH        "assets_raw/Games(19-05-2025).dat"
@@ -29,10 +34,29 @@
 typedef struct BenchmarkStamp {
 #if PLATFORM_AMIGA
     struct DateStamp amiga_stamp;
+#elif defined(_WIN32)
+    int64_t host_ticks;
 #else
-    clock_t host_ticks;
+    uint64_t host_microseconds;
 #endif
 } BenchmarkStamp;
+
+#if !PLATFORM_AMIGA && defined(_WIN32)
+static int64_t g_benchmark_frequency;
+static bool g_benchmark_frequency_ready = false;
+
+static bool benchmark_ensure_frequency(void)
+{
+    if (!g_benchmark_frequency_ready) {
+        if (!QueryPerformanceFrequency((long long *)&g_benchmark_frequency)) {
+            return false;
+        }
+        g_benchmark_frequency_ready = true;
+    }
+
+    return true;
+}
+#endif
 
 /**
  * @brief Capture a timestamp for benchmark measurements.
@@ -43,8 +67,14 @@ static BenchmarkStamp benchmark_now(void)
 
 #if PLATFORM_AMIGA
     DateStamp(&stamp.amiga_stamp);
+#elif defined(_WIN32)
+    if (benchmark_ensure_frequency()) {
+        QueryPerformanceCounter((long long *)&stamp.host_ticks);
+    } else {
+        stamp.host_ticks = 0;
+    }
 #else
-    stamp.host_ticks = clock();
+    stamp.host_microseconds = (uint64_t)(((double)clock() * 1000000.0) / (double)CLOCKS_PER_SEC);
 #endif
 
     return stamp;
@@ -78,16 +108,41 @@ static unsigned long benchmark_elapsed_milliseconds(BenchmarkStamp start,
     elapsed_ticks = end_ticks - start_ticks;
     return (elapsed_ticks * 1000UL) / AMIGA_TICKS_PER_SECOND;
 #else
-    clock_t elapsed_ticks;
+#if defined(_WIN32)
+    int64_t elapsed_ticks;
+
+    if (!benchmark_ensure_frequency()) {
+        return 0;
+    }
 
     if (end.host_ticks < start.host_ticks) {
         return 0;
     }
 
-    elapsed_ticks = end.host_ticks - start.host_ticks;
-    return (unsigned long)((elapsed_ticks * 1000UL) / CLOCKS_PER_SEC);
+    elapsed_ticks = (int64_t)(end.host_ticks - start.host_ticks);
+    return (unsigned long)(((uint64_t)elapsed_ticks * 1000ULL) /
+                           (uint64_t)g_benchmark_frequency);
+#else
+    if (end.host_microseconds < start.host_microseconds) {
+        return 0;
+    }
+
+    return (unsigned long)((end.host_microseconds - start.host_microseconds) / 1000ULL);
+#endif
 #endif
 }
+
+#ifdef PLATFORM_AMIGA
+static void print_amiga_stage(const char *stage)
+{
+    if (!stage || stage[0] == '\0') {
+        return;
+    }
+
+    printf("[stage] %s\n", stage);
+    fflush(stdout);
+}
+#endif
 
 /**
  * @brief Ensure the parent directory for a path exists.
@@ -571,6 +626,9 @@ int main(int argc, char **argv)
     append_to_log("WARNING: set a high Amiga stack manually before running (example: STACK 100000) to avoid crashes");
     append_to_log("Standalone DAT-to-TLV run starting for '%s'", dat_path);
     append_to_log("Stage: parsing DAT filenames");
+#ifdef PLATFORM_AMIGA
+    print_amiga_stage("parsing DAT filenames");
+#endif
 
     filename_count = parse_dat_filenames_minimal(dat_path, &filenames);
     if (filename_count == 0 || !filenames) {
@@ -581,6 +639,9 @@ int main(int argc, char **argv)
     append_to_log("Stage complete: parsed %lu DAT filenames", (unsigned long)filename_count);
 
     append_to_log("Stage: loading pack types");
+#ifdef PLATFORM_AMIGA
+    print_amiga_stage("loading pack types");
+#endif
     pack_types = load_pack_types(pack_types_path, &pack_count);
     if (!pack_types || pack_count == 0) {
         append_to_log("ERROR: failed to load pack types from '%s'", pack_types_path);
@@ -592,6 +653,9 @@ int main(int argc, char **argv)
     pack_index = find_pack_index_for_dat(pack_types, pack_count, dat_path);
 
     append_to_log("Stage: initializing TLV session");
+#ifdef PLATFORM_AMIGA
+    print_amiga_stage("initializing TLV session");
+#endif
     if (!tlv_session_init(csv_dir, pack_types_path)) {
         append_to_log("ERROR: failed to initialize TLV session");
         fprintf(stderr, "Failed to initialize TLV session\n");
@@ -607,6 +671,9 @@ int main(int argc, char **argv)
     memset(records, 0, filename_count * sizeof(TLV_Record));
 
     build_start = benchmark_now();
+#ifdef PLATFORM_AMIGA
+    print_amiga_stage("processing filename batch");
+#endif
     if (!tlv_session_process_batch((const char **)filenames,
                                    (uint32_t)filename_count,
                                    (uint32_t)pack_index,
@@ -616,6 +683,9 @@ int main(int argc, char **argv)
         goto cleanup;
     }
 
+#ifdef PLATFORM_AMIGA
+    print_amiga_stage("aggregating TLV records");
+#endif
     if (!tlv_record_init(&aggregate)) {
         fprintf(stderr, "Failed to initialize aggregate TLV record\n");
         goto cleanup;
@@ -651,6 +721,9 @@ int main(int argc, char **argv)
 
     ensure_parent_directory_exists(output_path);
     save_start = benchmark_now();
+#ifdef PLATFORM_AMIGA
+    print_amiga_stage("writing TLV output");
+#endif
     output_file = whd_fopen(output_path, "wb");
     if (!output_file) {
         fprintf(stderr, "Failed to open output file %s\n", output_path);
@@ -680,6 +753,9 @@ int main(int argc, char **argv)
                          save_elapsed_ms);
     printf("Summary log:  %s\n", summary_log_path);
 
+#ifdef PLATFORM_AMIGA
+    print_amiga_stage("writing summary log");
+#endif
     if (!append_summary_log(summary_log_path,
                             summary_log_is_default,
                             resolved_summary_log_path,
@@ -700,11 +776,17 @@ int main(int argc, char **argv)
     }
 
     if (tlv_profile_is_enabled()) {
+#ifdef PLATFORM_AMIGA
+        print_amiga_stage("printing profile summary");
+#endif
         tlv_profile_print_summary(stdout);
         tlv_profile_log_summary();
     }
 
 cleanup:
+#ifdef PLATFORM_AMIGA
+    print_amiga_stage(success ? "final cleanup" : "cleanup after failure");
+#endif
     if (output_file) {
         whd_fclose(output_file);
     }

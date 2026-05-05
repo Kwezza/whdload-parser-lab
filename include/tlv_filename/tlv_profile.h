@@ -35,6 +35,7 @@ typedef enum TLV_ProfileSection {
     TLV_PROFILE_SECTION_PACK_FIELD_CSV_MATCH,
     TLV_PROFILE_SECTION_UNKNOWN_TOKEN,
     TLV_PROFILE_SECTION_CSV_LOOKUP,
+    TLV_PROFILE_SECTION_CSV_LOOKUP_LOADED,
     TLV_PROFILE_SECTION_TLV_ADD_ENTRY,
     TLV_PROFILE_SECTION_AGGREGATE_MERGE,
     TLV_PROFILE_SECTION_COUNT
@@ -43,8 +44,10 @@ typedef enum TLV_ProfileSection {
 typedef struct TLV_ProfileStamp {
 #if PLATFORM_AMIGA
     struct DateStamp amiga_stamp;
+#elif defined(_WIN32)
+    int64_t host_ticks;
 #else
-    clock_t host_ticks;
+    uint64_t host_microseconds;
 #endif
 } TLV_ProfileStamp;
 

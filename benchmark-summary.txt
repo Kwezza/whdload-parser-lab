@@ -7,25 +7,26 @@ Processed:    3861
 Successful:   3861
 Errors:       0
 TLV entries:  11634
-TLV build time: 185980 ms
-TLV save time: 1560 ms
+TLV build time: 160540 ms
+TLV save time: 1380 ms
 
 TLV pipeline profile (save excluded):
-session_init       calls=1      total=100      ms avg=100    ms max=100    ms share=  0.0%
-batch_total        calls=1      total=179700   ms avg=179700 ms max=179700 ms share=100.0%
-record_init        calls=3861   total=1300     ms avg=0      ms max=20     ms share=  0.7%
-process_filename   calls=3861   total=175960   ms avg=45     ms max=280    ms share= 97.9%
-sanitize           calls=3861   total=1160     ms avg=0      ms max=20     ms share=  0.6%
-prescan            calls=3861   total=120240   ms avg=31     ms max=100    ms share= 66.9%
-prescan_join       calls=48086  total=12720    ms avg=0      ms max=20     ms share=  7.0%
-prescan_lookup     calls=48086  total=68120    ms avg=1      ms max=60     ms share= 37.9%
-prescan_rebuild    calls=137    total=140      ms avg=1      ms max=20     ms share=  0.0%
-tokenize           calls=3861   total=4220     ms avg=1      ms max=20     ms share=  2.3%
-token_loop         calls=3861   total=39080    ms avg=10     ms max=240    ms share= 21.7%
-token_checks       calls=7657   total=13200    ms avg=1      ms max=20     ms share=  7.3%
-pack_field_match   calls=918    total=22460    ms avg=24     ms max=240    ms share= 12.4%
-unknown_token      calls=21     total=0        ms avg=0      ms max=0      ms share=  0.0%
-csv_lookup         calls=60758  total=53260    ms avg=0      ms max=60     ms share= 29.6%
-tlv_add_entry      calls=23268  total=6300     ms avg=0      ms max=20     ms share=  3.5%
-aggregate_merge    calls=1      total=6280     ms avg=6280   ms max=6280   ms share=  3.4%
+session_init       calls=1      total=     120.000 ms avg=     120.000 ms max=     120.000 ms share=  0.0%
+batch_total        calls=1      total=  153380.000 ms avg=  153380.000 ms max=  153380.000 ms share=100.0%
+record_init        calls=3861   total=    1240.000 ms avg=       0.321 ms max=      20.000 ms share=  0.8%
+process_filename   calls=3861   total=  147940.000 ms avg=      38.316 ms max=     160.000 ms share= 96.4%
+sanitize           calls=3861   total=    1220.000 ms avg=       0.315 ms max=      20.000 ms share=  0.7%
+prescan            calls=3861   total=  108020.000 ms avg=      27.977 ms max=     100.000 ms share= 70.4%
+prescan_join       calls=48971  total=   12420.000 ms avg=       0.253 ms max=      20.000 ms share=  8.0%
+prescan_lookup     calls=48971  total=   58580.000 ms avg=       1.196 ms max=      20.000 ms share= 38.1%
+prescan_rebuild    calls=141    total=       0.000 ms avg=       0.000 ms max=       0.000 ms share=  0.0%
+tokenize           calls=3861   total=    4120.000 ms avg=       1.067 ms max=      20.000 ms share=  2.6%
+token_loop         calls=3861   total=   23520.000 ms avg=       6.091 ms max=      60.000 ms share= 15.3%
+token_checks       calls=7653   total=    7540.000 ms avg=       0.985 ms max=      20.000 ms share=  4.9%
+pack_field_match   calls=914    total=   12160.000 ms avg=      13.304 ms max=      20.000 ms share=  7.9%
+unknown_token      calls=21     total=       0.000 ms avg=       0.000 ms max=       0.000 ms share=  0.0%
+csv_lookup         calls=914    total=    7120.000 ms avg=       7.789 ms max=      20.000 ms share=  4.6%
+csv_lookup_loaded  calls=54056  total=   37440.000 ms avg=       0.692 ms max=      20.000 ms share= 24.4%
+tlv_add_entry      calls=23268  total=    6680.000 ms avg=       0.287 ms max=      20.000 ms share=  4.3%
+aggregate_merge    calls=1      total=    6620.000 ms avg=    6620.000 ms max=    6620.000 ms share=  4.3%
 

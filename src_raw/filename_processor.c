@@ -154,6 +154,138 @@ static bool build_joined_token(char *buffer,
     return true;
 }
 
+/**
+ * @brief Rebuild an underscore-joined filename from token parts
+ */
+static void rebuild_filename_from_parts(char *buffer,
+                                        size_t buffer_size,
+                                        char *const *parts,
+                                        uint32_t part_count) {
+    uint32_t index;
+    size_t length;
+
+    if (!buffer || buffer_size == 0) {
+        return;
+    }
+
+    buffer[0] = '\0';
+    if (!parts || part_count == 0) {
+        return;
+    }
+
+    length = 0;
+    for (index = 0; index < part_count; index++) {
+        const char *part;
+        size_t part_length;
+
+        part = parts[index];
+        if (!part || part[0] == '\0') {
+            continue;
+        }
+
+        part_length = strlen(part);
+        if (length > 0) {
+            if (length + 1 >= buffer_size) {
+                break;
+            }
+            buffer[length++] = '_';
+        }
+
+        if (length + part_length >= buffer_size) {
+            break;
+        }
+
+        memcpy(buffer + length, part, part_length);
+        length += part_length;
+        buffer[length] = '\0';
+    }
+}
+
+/**
+ * @brief Remove a contiguous token span by compacting part pointers in place
+ */
+static void compact_token_parts(char **parts,
+                                uint32_t *part_count,
+                                uint32_t start,
+                                uint32_t window) {
+    uint32_t read_index;
+    uint32_t write_index;
+    uint32_t count;
+
+    if (!parts || !part_count || window == 0) {
+        return;
+    }
+
+    count = *part_count;
+    if (start >= count || start + window > count) {
+        return;
+    }
+
+    write_index = start;
+    for (read_index = start + window; read_index < count; read_index++) {
+        parts[write_index++] = parts[read_index];
+    }
+
+    *part_count = count - window;
+}
+
+/**
+ * @brief Cheap filter for version-like tokens before invoking the parser
+ */
+static bool token_might_be_version(const char *token) {
+    unsigned char first;
+
+    if (!token || token[0] == '\0') {
+        return false;
+    }
+
+    first = (unsigned char)token[0];
+    if (tolower(first) == 'v') {
+        return isdigit((unsigned char)token[1]) ? true : false;
+    }
+
+    return (isdigit(first) && strchr(token, '.') != NULL) ? true : false;
+}
+
+/**
+ * @brief Cheap filter for language-like tokens before invoking the parser
+ */
+static bool token_might_be_language(const char *token) {
+    size_t length;
+    size_t index;
+
+    if (!token || token[0] == '\0') {
+        return false;
+    }
+
+    length = strlen(token);
+    if (length < 2 || length > MAX_LANGUAGE_CHARS || (length % 2) != 0) {
+        return false;
+    }
+
+    for (index = 0; index < length; index++) {
+        if (!isalpha((unsigned char)token[index])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * @brief Cheap filter for numeric SPS tokens before scanning parts
+ */
+static bool token_might_be_sps(const char *token) {
+    unsigned char first;
+
+    if (!token || token[0] == '\0') {
+        return false;
+    }
+
+    first = (unsigned char)token[0];
+    return isdigit(first) ? true : false;
+}
+
 /*------------------------------------------------------------------------*/
 /* Filename Sanitization */
 
@@ -264,6 +396,8 @@ ProcessingResult language_parser_parse_token(const char *language_token,
                                             GlobalCSVManager *csv_manager,
                                             uint16_t *language_bitfield,
                                             ProcessingError *error) {
+    CSVCache *language_cache;
+
     if (!language_token || !field_registry || !csv_manager || !language_bitfield) {
         processing_error_set(error, PROCESSING_ERROR_INVALID_INPUT, NULL, NULL,
                              "Required parameter is NULL");
@@ -280,12 +414,22 @@ ProcessingResult language_parser_parse_token(const char *language_token,
         return PROCESSING_ERROR_INVALID_FORMAT;
     }
 
+    language_cache = NULL;
+    if (csv_manager->cache_enabled) {
+        language_cache = csv_cache_get_or_load(csv_manager, "Language");
+    }
+
     /* Parse each 2-character language code */
     for (size_t i = 0; i < len; i += 2) {
         char lang_code[3] = {language_token[i], language_token[i+1], '\0'};
+        uint32_t lang_id;
 
         /* Look up language code in CSV */
-        uint32_t lang_id = csv_cache_lookup(csv_manager, "Language", lang_code);
+        if (language_cache != NULL) {
+            lang_id = csv_cache_lookup_loaded(language_cache, lang_code);
+        } else {
+            lang_id = csv_cache_lookup(csv_manager, "Language", lang_code);
+        }
         if (lang_id > 0 && lang_id <= 16) {  /* Assuming max 16 languages for bitfield */
             *language_bitfield |= (1 << (lang_id - 1));
         }
@@ -388,6 +532,8 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
     TLV_PROFILE_SCOPE(join_profile_stamp);
     TLV_PROFILE_SCOPE(lookup_profile_stamp);
     TLV_PROFILE_SCOPE(rebuild_profile_stamp);
+    CSVCache *cfg_caches[32];
+    uint32_t cache_index;
 
     if (!filename || !field_registry || !csv_manager || !processed_filename) {
         processing_error_set(error, PROCESSING_ERROR_INVALID_INPUT, NULL, NULL,
@@ -409,6 +555,14 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
         return PROCESSING_SUCCESS; /* nothing to do */
     }
 
+    for (cache_index = 0; cache_index < cfg_count; cache_index++) {
+        cfg_caches[cache_index] = NULL;
+        if (csv_manager->cache_enabled && cfgs[cache_index].csv_base &&
+            cfgs[cache_index].csv_base[0] != '\0') {
+            cfg_caches[cache_index] = csv_cache_get_or_load(csv_manager, cfgs[cache_index].csv_base);
+        }
+    }
+
     /* Targeted debug: list prescan fields for known sample names */
     if (filename && (strstr(filename, "Kernal_Version") != NULL ||
                      strstr(filename, "German_fix_by_Torti-the-Smurf") != NULL)) {
@@ -427,6 +581,7 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
     /* For each configured field in order, attempt matches */
     for (uint32_t c = 0; c < cfg_count; c++) {
         const FieldPrescanConfig *cfg = &cfgs[c];
+        bool field_changed;
         if (!cfg->enabled || !cfg->csv_base || cfg->csv_base[0] == '\0') {
             continue;
         }
@@ -440,7 +595,7 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
             tmp[tlen] = '\0';
         }
 
-    /* Split by underscores */
+        /* Split by underscores */
         char *parts[MAX_TOKENS];
         uint32_t pc = 0;
         char *saveptr = NULL;
@@ -450,16 +605,25 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
             tok = whd_strtok_r(NULL, "_", &saveptr);
         }
 
-    /* Window sizes: prefer longer spans first; if multi_token, try full length down to 1 */
-    uint32_t max_window = cfg->multi_token ? pc : 1U;
-    /* any_found reserved for future logging; avoid unused on host */
+        /* any_found reserved for future logging; avoid unused on host */
 #if PLATFORM_AMIGA
-    bool any_found = false;
+        bool any_found = false;
 #endif
 
-    for (uint32_t window = max_window; window >= 1; window--) {
-            if (pc < window) { continue; }
-            for (uint32_t i = 0; i + window <= pc; i++) {
+        do {
+            uint32_t max_window;
+            bool removed_span;
+
+            field_changed = false;
+            removed_span = false;
+            max_window = cfg->multi_token ? pc : 1U;
+
+            for (uint32_t window = max_window; window >= 1; window--) {
+                if (pc < window) {
+                    continue;
+                }
+
+                for (uint32_t i = 0; i + window <= pc; i++) {
                 /* Build joined token */
                 char joined[MAX_TOKEN_LENGTH];
                 TLV_PROFILE_START(join_profile_stamp);
@@ -480,9 +644,14 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
 
         /* Lookup in CSV (column 1 as token) */
         TLV_PROFILE_START(lookup_profile_stamp);
-        uint32_t id = csv_cache_lookup(csv_manager, cfg->csv_base, joined);
+        uint32_t id;
+        if (cfg_caches[c] != NULL) {
+            id = csv_cache_lookup_loaded(cfg_caches[c], joined);
+        } else {
+            id = csv_cache_lookup(csv_manager, cfg->csv_base, joined);
+        }
         TLV_PROFILE_END(TLV_PROFILE_SECTION_PRESCAN_CSV_LOOKUP, lookup_profile_stamp);
-                if (id > 0) {
+                    if (id > 0) {
                     /* Add TLV entry storing the ID */
                     if (cfg->field_id != 0) {
                         tlv_record_add_entry(output_record, cfg->field_id,
@@ -495,57 +664,54 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
                     }
                     /* mark that we matched; reserved for Amiga-only logging */
 #if PLATFORM_AMIGA
-                    any_found = true;
+                        any_found = true;
 #endif
                     if (!cfg->allow_multiple) {
                         /* If single-only, avoid repeated additions in this field */
-                            /* continue scanning to remove from filename if requested below */
+                        /* continue scanning to remove from filename if requested below */
                     }
 
                     if (cfg->remove_from_filename) {
-                        /* Remove the span from processed_filename by reconstructing string without that window */
-                        char rebuild[MAX_FILENAME_LENGTH];
-                        TLV_PROFILE_START(rebuild_profile_stamp);
-                        rebuild[0] = '\0';
-                        for (uint32_t p = 0; p < pc; p++) {
-                            if (p >= i && p < i + window) { continue; }
-                            if (rebuild[0] != '\0') { strcat(rebuild, "_"); }
-                            if (strlen(rebuild) + strlen(parts[p]) < sizeof(rebuild)) {
-                                strcat(rebuild, parts[p]);
-                            }
-                        }
-                        /* Re-attach possible program name prefix if present in original; handled later by tokenizer */
-                        {
-                            size_t rlen = strlen(rebuild);
-                            if (rlen >= (size_t)MAX_FILENAME_LENGTH) { rlen = (size_t)MAX_FILENAME_LENGTH - 1; }
-                            memcpy(processed_filename, rebuild, rlen);
-                            processed_filename[rlen] = '\0';
-                        }
+                        compact_token_parts(parts, &pc, i, window);
+                        field_changed = true;
+                        removed_span = true;
                         if (filename && (strstr(filename, "Kernal_Version") != NULL ||
                                          strstr(filename, "German_fix_by_Torti-the-Smurf") != NULL)) {
-                            append_to_log("PRESCAN STRIP: field=%s result='%s'", cfg->field_name ? cfg->field_name : "?", processed_filename);
+                            char debug_rebuild[MAX_FILENAME_LENGTH];
+                            rebuild_filename_from_parts(debug_rebuild, sizeof(debug_rebuild), parts, pc);
+                            append_to_log("PRESCAN STRIP: field=%s result='%s'", cfg->field_name ? cfg->field_name : "?", debug_rebuild);
                         }
-                        /* Update token list for subsequent windows by re-tokenizing */
-                        {
-                            size_t t2 = strlen(processed_filename);
-                            if (t2 >= sizeof(tmp)) { t2 = sizeof(tmp) - 1; }
-                            memcpy(tmp, processed_filename, t2);
-                            tmp[t2] = '\0';
-                        }
-                        pc = 0; saveptr = NULL;
-                        tok = whd_strtok_r(tmp, "_", &saveptr);
-                        while (tok && pc < MAX_TOKENS) { parts[pc++] = tok; tok = whd_strtok_r(NULL, "_", &saveptr); }
-                        TLV_PROFILE_END(TLV_PROFILE_SECTION_PRESCAN_REBUILD_STRIP, rebuild_profile_stamp);
-                        /* Restart window search from beginning for this field to catch further occurrences */
-            i = 0; /* will be reset by full field rescan */
-            /* To simplify, restart this field's scan entirely */
-                        goto restart_field_scan;
+                        break;
                     }
                 }
+
+                    if (removed_span) {
+                        break;
+                    }
+                }
+
+                if (removed_span) {
+                    break;
+                }
             }
+
+            if (removed_span) {
+                TLV_PROFILE_START(rebuild_profile_stamp);
+                rebuild_filename_from_parts(processed_filename,
+                                            MAX_FILENAME_LENGTH,
+                                            parts,
+                                            pc);
+                TLV_PROFILE_END(TLV_PROFILE_SECTION_PRESCAN_REBUILD_STRIP, rebuild_profile_stamp);
+            }
+        } while (pc > 0 && cfg->remove_from_filename && field_changed);
+
+        if (!field_changed) {
+            rebuild_filename_from_parts(processed_filename,
+                                        MAX_FILENAME_LENGTH,
+                                        parts,
+                                        pc);
         }
-restart_field_scan:
-    /* any_found reserved for future logging */
+        /* any_found reserved for future logging */
     }
 
     return PROCESSING_SUCCESS;
@@ -663,6 +829,8 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
                                                  const PackType *pack_info,
                                                  const FieldRegistry *field_registry,
                                                  GlobalCSVManager *csv_manager,
+                                                 const PackFieldMatcher *pack_matchers,
+                                                 uint32_t pack_matcher_count,
                                                  TLV_Record *output_record,
                                                  ProcessingError *error_summary) {
     ProcessingError step_error;
@@ -677,6 +845,9 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
     TLV_PROFILE_SCOPE(token_checks_profile_stamp);
     TLV_PROFILE_SCOPE(pack_field_match_profile_stamp);
     TLV_PROFILE_SCOPE(unknown_token_profile_stamp);
+    uint8_t version_field_id;
+    uint8_t language_field_id;
+    uint8_t sps_field_id;
 
     /* Initialize error context */
     processing_error_init(error_summary, "tlv_orchestrator");
@@ -686,6 +857,10 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
                              "Required parameter is NULL");
         return PROCESSING_ERROR_INVALID_INPUT;
     }
+
+    version_field_id = field_registry_get_id(field_registry, "version");
+    language_field_id = field_registry_get_id(field_registry, "language");
+    sps_field_id = field_registry_get_id(field_registry, "sps");
 
     /* Step 0: raw filename externalized to sidecar; we now emit display_name (prettified) field
      * early to serve as a record delimiter. For now we map sanitized filename directly; future
@@ -768,22 +943,30 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
     TLV_PROFILE_START(token_loop_profile_stamp);
     for (uint32_t i = 0; i < tf->token_count; i++) {
         const char *token = tf->tokens[i];
+        const char *ampersand_parts[MAX_TOKENS];
+        uint32_t ampersand_part_count = 0;
+        char ampersand_buffer[MAX_TOKEN_LENGTH];
+        bool version_candidate;
+        bool language_candidate;
+        bool sps_candidate;
         if (!token || token[0] == '\0') {
             continue; /* consumed by pre-pass or empty */
         }
         bool token_processed = false;
+        version_candidate = token_might_be_version(token);
+        language_candidate = token_might_be_language(token);
+        sps_candidate = token_might_be_sps(token);
 
         /* Try version parsing first */
         TLV_PROFILE_START(token_checks_profile_stamp);
-        processing_error_init(&step_error, "version_parser");
-        if (version_parser_detect_pattern(token, &step_error) == PROCESSING_SUCCESS) {
+        if (version_candidate) {
             char clean_version[MAX_VERSION_LENGTH];
+            processing_error_init(&step_error, "version_parser");
             if (version_parser_extract(token, clean_version, &step_error) == PROCESSING_SUCCESS) {
 #if PLATFORM_AMIGA
                 append_to_log("Found version: %s", clean_version);
 #endif
                 /* Add version to TLV record */
-                uint8_t version_field_id = field_registry_get_id(field_registry, "version");
                 if (version_field_id != 0) {
                     tlv_record_add_entry(output_record, version_field_id,
                                        (const uint8_t*)clean_version, strlen(clean_version));
@@ -796,9 +979,9 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
         }
 
         /* Try language parsing */
-        if (!token_processed) {
-            processing_error_init(&step_error, "language_parser");
+        if (!token_processed && language_candidate) {
             uint16_t language_bitfield;
+            processing_error_init(&step_error, "language_parser");
             if (language_parser_parse_token(token, field_registry, csv_manager,
                                            &language_bitfield, &step_error) == PROCESSING_SUCCESS) {
                 if (language_bitfield > 0) {
@@ -806,7 +989,6 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
                     append_to_log("Found language bitfield: 0x%04X", language_bitfield);
 #endif
                     /* Add language bitfield to TLV record */
-                    uint8_t language_field_id = field_registry_get_id(field_registry, "language");
                     if (language_field_id != 0) {
                         tlv_record_add_entry(output_record, language_field_id,
                                            (const uint8_t*)&language_bitfield, sizeof(language_bitfield));
@@ -821,8 +1003,7 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
         }
 
         /* Try SPS numeric detection (e.g., 4-digit IDs like 1653). Also support multi-valued 'sps' joined by '&'. */
-        if (!token_processed) {
-            uint8_t sps_field_id = field_registry_get_id(field_registry, "sps");
+        if (!token_processed && sps_candidate) {
             if (sps_field_id != 0) {
                 /* If token contains '&', split into sub-values; else treat as single */
                 const char *cursor = token;
@@ -860,40 +1041,56 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
         TLV_PROFILE_END(TLV_PROFILE_SECTION_TOKEN_CHECKS, token_checks_profile_stamp);
 
         /* Try CSV lookups for remaining pack-specific fields */
-    if (!token_processed && pack_info->field_list) {
+    if (!token_processed && (pack_matchers != NULL || pack_info->field_list)) {
+            if (strchr(token, '&') != NULL) {
+                size_t token_length = strlen(token);
+                char *ampersand_saveptr = NULL;
+                char *ampersand_part;
+
+                if (token_length >= sizeof(ampersand_buffer)) {
+                    token_length = sizeof(ampersand_buffer) - 1;
+                }
+                memcpy(ampersand_buffer, token, token_length);
+                ampersand_buffer[token_length] = '\0';
+
+                ampersand_part = whd_strtok_r(ampersand_buffer, "&", &ampersand_saveptr);
+                while (ampersand_part && ampersand_part_count < MAX_TOKENS) {
+                    ampersand_parts[ampersand_part_count++] = ampersand_part;
+                    ampersand_part = whd_strtok_r(NULL, "&", &ampersand_saveptr);
+                }
+            }
+
             TLV_PROFILE_START(pack_field_match_profile_stamp);
-            for (uint32_t j = 0; j < pack_info->num_fields; j++) {
-                const char *field_name = pack_info->field_list[j];
-                const char *csv_name = get_csv_filename_for_field(field_registry, field_name);
+            uint32_t matcher_total = pack_matchers ? pack_matcher_count : (uint32_t)pack_info->num_fields;
+            for (uint32_t j = 0; j < matcher_total; j++) {
+                const char *field_name = pack_matchers ? pack_matchers[j].field_name : pack_info->field_list[j];
+                const char *csv_name = pack_matchers ? pack_matchers[j].csv_name : get_csv_filename_for_field(field_registry, field_name);
+                uint8_t csv_field_id = pack_matchers ? pack_matchers[j].field_id : field_registry_get_id(field_registry, field_name);
+                CSVCache *resolved_cache = pack_matchers ? pack_matchers[j].resolved_cache : NULL;
+                bool generic_csv_match_enabled = pack_matchers ? pack_matchers[j].generic_csv_match_enabled : true;
                 uint32_t token_id;
 
                 /* Raw filename field eliminated; no need to skip */
-                if (!csv_name || csv_name[0] == '\0') {
+                if (!generic_csv_match_enabled || !csv_name || csv_name[0] == '\0') {
                     continue; /* No CSV backing for this field */
                 }
 
                 /* If token contains '&', split into parts and attempt each; robust to INI flag omissions */
-                if (strchr(token, '&') != NULL) {
-                    const char *cursor = token;
+                if (ampersand_part_count > 0) {
                     bool any_match = false;
-                    do {
-                        char part_buf[MAX_TOKEN_LENGTH];
-                        size_t p = 0;
-                        while (*cursor && *cursor != '&' && p < sizeof(part_buf) - 1) {
-                            part_buf[p++] = *cursor++;
-                        }
-                        part_buf[p] = '\0';
-                        if (*cursor == '&') { cursor++; }
+                    for (uint32_t part_index = 0; part_index < ampersand_part_count; part_index++) {
+                        const char *part_buf = ampersand_parts[part_index];
 
-                        if (part_buf[0] != '\0') {
+                        if (part_buf && part_buf[0] != '\0') {
                             processing_error_init(&step_error, "csv_token_matcher");
-                            if (csv_token_matcher_lookup(part_buf, csv_name, field_registry,
-                                                       csv_manager, &token_id, &step_error) == PROCESSING_SUCCESS) {
+                            if ((resolved_cache != NULL && (token_id = csv_cache_lookup_loaded(resolved_cache, part_buf)) != 0) ||
+                                (resolved_cache == NULL &&
+                                 csv_token_matcher_lookup(part_buf, csv_name, field_registry,
+                                                       csv_manager, &token_id, &step_error) == PROCESSING_SUCCESS)) {
 #if PLATFORM_AMIGA
                                 append_to_log("Found token '%s' in %s.csv (ID=%lu)", part_buf, csv_name, (unsigned long)token_id);
 #endif
                                 /* Add CSV token ID to TLV record */
-                                uint8_t csv_field_id = field_registry_get_id(field_registry, field_name);
                                 if (csv_field_id != 0) {
                                     tlv_record_add_entry(output_record, csv_field_id,
                                                        (const uint8_t*)&token_id, sizeof(token_id));
@@ -905,18 +1102,19 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
                                 any_match = true;
                             }
                         }
-                    } while (*cursor != '\0');
+                    }
 
                     if (any_match) { token_processed = true; break; }
                 } else {
                     processing_error_init(&step_error, "csv_token_matcher");
-                    if (csv_token_matcher_lookup(token, csv_name, field_registry,
-                                               csv_manager, &token_id, &step_error) == PROCESSING_SUCCESS) {
+                    if ((resolved_cache != NULL && (token_id = csv_cache_lookup_loaded(resolved_cache, token)) != 0) ||
+                        (resolved_cache == NULL &&
+                         csv_token_matcher_lookup(token, csv_name, field_registry,
+                                               csv_manager, &token_id, &step_error) == PROCESSING_SUCCESS)) {
 #if PLATFORM_AMIGA
                         append_to_log("Found token '%s' in %s.csv (ID=%lu)", token, csv_name, (unsigned long)token_id);
 #endif
                         /* Add CSV token ID to TLV record */
-                        uint8_t csv_field_id = field_registry_get_id(field_registry, field_name);
                         if (csv_field_id != 0) {
                             tlv_record_add_entry(output_record, csv_field_id,
                                                (const uint8_t*)&token_id, sizeof(token_id));

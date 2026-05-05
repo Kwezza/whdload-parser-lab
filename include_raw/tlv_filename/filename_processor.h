@@ -40,6 +40,14 @@ struct TLV_Record;
 /* Use canonical PackType definition from pack_types_loader.h */
 #include <io/pack_types_loader.h>
 
+typedef struct {
+    const char *field_name;
+    const char *csv_name;
+    uint8_t field_id;
+    CSVCache *resolved_cache;
+    bool generic_csv_match_enabled;
+} PackFieldMatcher;
+
 /*------------------------------------------------------------------------*/
 /* Core Processing Functions */
 
@@ -61,6 +69,8 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
                                                  const PackType *pack_info,
                                                  const FieldRegistry *field_registry,
                                                  GlobalCSVManager *csv_manager,
+                                                 const PackFieldMatcher *pack_matchers,
+                                                 uint32_t pack_matcher_count,
                                                  struct TLV_Record *output_record,
                                                  ProcessingError *error_summary);
 

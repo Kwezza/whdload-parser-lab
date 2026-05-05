@@ -144,6 +144,22 @@ bool csv_cache_load_special_csv(GlobalCSVManager *manager, const char *special_c
 uint32_t csv_cache_lookup(GlobalCSVManager *manager, const char *csv_name, const char *token);
 
 /**
+ * @brief Resolve a CSV cache by name, loading it on demand when caching is enabled
+ * @param manager CSV manager
+ * @param csv_name CSV cache name to resolve
+ * @return Loaded cache pointer, or NULL if unavailable
+ */
+CSVCache *csv_cache_get_or_load(GlobalCSVManager *manager, const char *csv_name);
+
+/**
+ * @brief Fast lookup against an already resolved CSV cache
+ * @param cache Loaded CSV cache
+ * @param token Token to find
+ * @return Token ID if found, 0 if not found
+ */
+uint32_t csv_cache_lookup_loaded(const CSVCache *cache, const char *token);
+
+/**
  * @brief Find which CSV file contains a specific token
  * @param manager CSV manager
  * @param token Token to locate

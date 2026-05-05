@@ -22,6 +22,11 @@
 #include <string.h>
 #include <stdio.h>
 
+#ifdef PLATFORM_AMIGA
+#include <dos/dos.h>
+#include <proto/dos.h>
+#endif
+
 /*------------------------------------------------------------------------*/
 /* Constants */
 
@@ -39,6 +44,135 @@ static GlobalCSVManager session_csv_manager = {0};
 static PackType *session_pack_types = NULL;
 static size_t session_pack_count = 0;
 static bool session_initialized = false;
+
+#ifdef PLATFORM_AMIGA
+#define TLV_HEARTBEAT_INTERVAL_TICKS (2UL * 50UL)
+
+typedef struct BatchHeartbeat {
+    struct DateStamp last_stamp;
+    bool initialized;
+} BatchHeartbeat;
+
+static unsigned long heartbeat_tick_value(const struct DateStamp *stamp)
+{
+    if (!stamp) {
+        return 0;
+    }
+
+    return ((unsigned long)stamp->ds_Days * 24UL * 60UL * 60UL * 50UL) +
+           ((unsigned long)stamp->ds_Minute * 60UL * 50UL) +
+           (unsigned long)stamp->ds_Tick;
+}
+
+static unsigned long heartbeat_elapsed_ticks(const struct DateStamp *start,
+                                             const struct DateStamp *end)
+{
+    unsigned long start_ticks;
+    unsigned long end_ticks;
+
+    if (!start || !end) {
+        return 0;
+    }
+
+    start_ticks = heartbeat_tick_value(start);
+    end_ticks = heartbeat_tick_value(end);
+    if (end_ticks < start_ticks) {
+        return 0;
+    }
+
+    return end_ticks - start_ticks;
+}
+
+static void emit_batch_heartbeat(BatchHeartbeat *heartbeat,
+                                 const char *filename,
+                                 uint32_t current_index,
+                                 uint32_t total_count,
+                                 const ProcessingSummary *summary,
+                                 bool force_emit)
+{
+    struct DateStamp now;
+
+    if (!heartbeat || !filename || !summary) {
+        return;
+    }
+
+    DateStamp(&now);
+    if (!heartbeat->initialized) {
+        heartbeat->last_stamp = now;
+        heartbeat->initialized = true;
+    }
+
+    if (!force_emit &&
+        heartbeat_elapsed_ticks(&heartbeat->last_stamp, &now) < TLV_HEARTBEAT_INTERVAL_TICKS) {
+        return;
+    }
+
+    heartbeat->last_stamp = now;
+    printf("[heartbeat] %lu/%lu ok=%lu err=%lu current=%-.80s\n",
+           (unsigned long)current_index,
+           (unsigned long)total_count,
+           (unsigned long)summary->successful_count,
+           (unsigned long)summary->error_count,
+           filename);
+    fflush(stdout);
+}
+#endif
+
+static bool pack_field_uses_generic_csv_match(const char *field_name)
+{
+    if (!field_name || field_name[0] == '\0') {
+        return false;
+    }
+
+    if (strcmp(field_name, "version") == 0 ||
+        strcmp(field_name, "language") == 0 ||
+        strcmp(field_name, "sps") == 0 ||
+        strcmp(field_name, "contributors") == 0) {
+        return false;
+    }
+
+    return true;
+}
+
+static PackFieldMatcher *build_pack_field_matchers(const PackType *pack_info,
+                                                   const FieldRegistry *field_registry,
+                                                   GlobalCSVManager *csv_manager,
+                                                   uint32_t *matcher_count)
+{
+    PackFieldMatcher *matchers;
+    uint32_t count;
+    uint32_t index;
+
+    if (matcher_count) {
+        *matcher_count = 0;
+    }
+
+    if (!pack_info || !field_registry || !matcher_count ||
+        !pack_info->field_list || pack_info->num_fields == 0) {
+        return NULL;
+    }
+
+    count = (uint32_t)pack_info->num_fields;
+    matchers = whd_malloc(count * sizeof(*matchers));
+    if (!matchers) {
+        return NULL;
+    }
+
+    for (index = 0; index < count; index++) {
+        const char *field_name = pack_info->field_list[index];
+        matchers[index].field_name = field_name;
+        matchers[index].csv_name = get_csv_filename_for_field(field_registry, field_name);
+        matchers[index].field_id = field_registry_get_id(field_registry, field_name);
+        matchers[index].resolved_cache = NULL;
+        matchers[index].generic_csv_match_enabled = pack_field_uses_generic_csv_match(field_name);
+        if (csv_manager->cache_enabled && matchers[index].csv_name && matchers[index].csv_name[0] != '\0') {
+            matchers[index].resolved_cache = csv_cache_get_or_load(csv_manager, matchers[index].csv_name);
+        }
+    }
+
+    *matcher_count = count;
+    return matchers;
+}
 
 /*------------------------------------------------------------------------*/
 /* TLV Record Management */
@@ -569,6 +703,12 @@ bool tlv_session_process_batch(const char **filenames, uint32_t filename_count,
                               uint32_t pack_type_id, TLV_Record *output_records,
                               ProcessingSummary *processing_summary) {
     TLV_PROFILE_SCOPE(batch_profile_stamp);
+    PackFieldMatcher *pack_matchers;
+    uint32_t pack_matcher_count;
+#ifdef PLATFORM_AMIGA
+    BatchHeartbeat heartbeat;
+    const char *last_filename;
+#endif
 
     if (!filenames || !output_records || !processing_summary || !session_initialized) {
         return false;
@@ -584,8 +724,15 @@ bool tlv_session_process_batch(const char **filenames, uint32_t filename_count,
     processing_summary->successful_count = 0;
     processing_summary->error_count = 0;
 
+#ifdef PLATFORM_AMIGA
+    heartbeat.initialized = false;
+    last_filename = NULL;
+#endif
+
     /* Get pack type configuration */
     const PackType *pack_info = &session_pack_types[pack_type_id];
+    pack_matchers = build_pack_field_matchers(pack_info, session_field_registry,
+                                              &session_csv_manager, &pack_matcher_count);
 
     TLV_PROFILE_START(batch_profile_stamp);
 
@@ -594,6 +741,16 @@ bool tlv_session_process_batch(const char **filenames, uint32_t filename_count,
         ProcessingError error;
         TLV_PROFILE_SCOPE(record_init_profile_stamp);
         TLV_PROFILE_SCOPE(process_filename_profile_stamp);
+
+#ifdef PLATFORM_AMIGA
+        last_filename = filenames[i];
+        emit_batch_heartbeat(&heartbeat,
+                             filenames[i],
+                             i + 1,
+                             filename_count,
+                             processing_summary,
+                             false);
+#endif
 
         /* Initialize output record */
         TLV_PROFILE_START(record_init_profile_stamp);
@@ -609,7 +766,8 @@ bool tlv_session_process_batch(const char **filenames, uint32_t filename_count,
         TLV_PROFILE_START(process_filename_profile_stamp);
         ProcessingResult result = tlv_process_filename_orchestrator(
             filenames[i], pack_info, session_field_registry,
-            &session_csv_manager, &output_records[i], &error);
+            &session_csv_manager, pack_matchers, pack_matcher_count,
+            &output_records[i], &error);
         TLV_PROFILE_END(TLV_PROFILE_SECTION_PROCESS_FILENAME, process_filename_profile_stamp);
 
         if (result == PROCESSING_SUCCESS) {
@@ -626,7 +784,22 @@ bool tlv_session_process_batch(const char **filenames, uint32_t filename_count,
         processing_summary->total_processed++;
     }
 
+#ifdef PLATFORM_AMIGA
+    if (last_filename) {
+        emit_batch_heartbeat(&heartbeat,
+                             last_filename,
+                             processing_summary->total_processed,
+                             filename_count,
+                             processing_summary,
+                             true);
+    }
+#endif
+
     TLV_PROFILE_END(TLV_PROFILE_SECTION_BATCH_TOTAL, batch_profile_stamp);
+
+    if (pack_matchers) {
+        whd_free(pack_matchers);
+    }
 
     return true;
 }
@@ -693,10 +866,18 @@ TLV_Record *tlv_builder_create_record(const char *pack_name,
 
     /* Process single filename (assume pack type 0 - Games) */
     ProcessingError error;
+    PackFieldMatcher *pack_matchers = NULL;
+    uint32_t pack_matcher_count = 0;
     if (session_pack_count > 0) {
+        pack_matchers = build_pack_field_matchers(&session_pack_types[0], session_field_registry,
+                                                  &session_csv_manager, &pack_matcher_count);
         ProcessingResult result = tlv_process_filename_orchestrator(
             pack_name, &session_pack_types[0], session_field_registry,
-            &session_csv_manager, record, &error);
+            &session_csv_manager, pack_matchers, pack_matcher_count, record, &error);
+
+        if (pack_matchers) {
+            whd_free(pack_matchers);
+        }
 
         if (result != PROCESSING_SUCCESS) {
             tlv_record_free(record);

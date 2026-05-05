@@ -200,7 +200,7 @@ static bool csv_cache_insert(CSVCache *cache, const char *token, const char *lon
 /**
  * @brief Lookup token in CSV cache hash table
  */
-static uint32_t csv_cache_find(CSVCache *cache, const char *token) {
+static uint32_t csv_cache_find(const CSVCache *cache, const char *token) {
     if (!cache || !token || cache->entry_count == 0) {
         return 0;
     }
@@ -225,7 +225,7 @@ static uint32_t csv_cache_find(CSVCache *cache, const char *token) {
 /**
  * @brief Case-insensitive lookup token in CSV cache hash table (linear scan fallback)
  */
-static uint32_t csv_cache_find_ci(CSVCache *cache, const char *token) {
+static uint32_t csv_cache_find_ci(const CSVCache *cache, const char *token) {
     if (!cache || !token || cache->entry_count == 0) {
         return 0;
     }
@@ -711,6 +711,51 @@ bool csv_cache_load_special_csv(GlobalCSVManager *manager, const char *special_c
 /**
  * @brief Fast lookup: find ID for token in specific CSV cache
  */
+CSVCache *csv_cache_get_or_load(GlobalCSVManager *manager, const char *csv_name) {
+    uint32_t i;
+
+    if (!manager || !csv_name || !manager->cache_enabled) {
+        return NULL;
+    }
+
+    for (i = 0; i < manager->cache_count; i++) {
+        if (strcmp(manager->caches[i].csv_name, csv_name) == 0) {
+            return &manager->caches[i];
+        }
+    }
+
+    if (!csv_cache_load_file(manager, csv_name)) {
+        return NULL;
+    }
+
+    if (manager->cache_count == 0) {
+        return NULL;
+    }
+
+    return &manager->caches[manager->cache_count - 1];
+}
+
+uint32_t csv_cache_lookup_loaded(const CSVCache *cache, const char *token) {
+    uint32_t id;
+    TLV_PROFILE_SCOPE(profile_stamp);
+
+    if (!cache || !token) {
+        return 0;
+    }
+
+    TLV_PROFILE_START(profile_stamp);
+
+    id = csv_cache_find(cache, token);
+    if (id == 0) {
+        /* Fallback: case-insensitive match for minor case differences */
+        id = csv_cache_find_ci(cache, token);
+    }
+
+    TLV_PROFILE_END(TLV_PROFILE_SECTION_CSV_LOOKUP_LOADED, profile_stamp);
+
+    return id;
+}
+
 uint32_t csv_cache_lookup(GlobalCSVManager *manager, const char *csv_name, const char *token) {
     uint32_t result;
     TLV_PROFILE_SCOPE(profile_stamp);
@@ -727,42 +772,17 @@ uint32_t csv_cache_lookup(GlobalCSVManager *manager, const char *csv_name, const
         char csv_path[512];
         snprintf(csv_path, sizeof(csv_path), "%s/%s.csv", manager->csv_base_path, csv_name);
         result = csv_direct_file_lookup(csv_path, token);
-        goto done;
-    }
-
-    /* Try to find an already-loaded cache with this name */
-    CSVCache *target = NULL;
-    for (uint32_t i = 0; i < manager->cache_count; i++) {
-        if (strcmp(manager->caches[i].csv_name, csv_name) == 0) {
-            target = &manager->caches[i];
-            break;
+    } else {
+        CSVCache *target = csv_cache_get_or_load(manager, csv_name);
+        if (target) {
+            result = csv_cache_lookup_loaded(target, token);
         }
     }
 
-    /* If not loaded yet, lazily load this CSV now */
-    if (!target) {
-        if (!csv_cache_load_file(manager, csv_name)) {
-            goto done; /* Missing or failed to load */
-        }
-        /* Newly loaded cache will be at the end */
-        if (manager->cache_count > 0) {
-            target = &manager->caches[manager->cache_count - 1];
-        }
-    }
-
-    if (target) {
-        uint32_t id = csv_cache_find(target, token);
-        if (id == 0) {
-            /* Fallback: case-insensitive match for minor case differences */
-            id = csv_cache_find_ci(target, token);
-        }
 #if PLATFORM_HOST
-    CSVDBG("DEBUG: csv_cache_lookup('%s', '%s') -> %u\n", csv_name, token, id);
+    CSVDBG("DEBUG: csv_cache_lookup('%s', '%s') -> %u\n", csv_name, token, result);
 #endif
-        result = id;
-    }
 
-done:
     TLV_PROFILE_END(TLV_PROFILE_SECTION_CSV_LOOKUP, profile_stamp);
     return result;
 }
