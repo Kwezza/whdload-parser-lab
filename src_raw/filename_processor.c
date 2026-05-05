@@ -286,6 +286,84 @@ static bool token_might_be_sps(const char *token) {
     return isdigit(first) ? true : false;
 }
 
+/**
+ * @brief Lowercase token into lower_out and compute djb2 hash, length, and fingerprint in one
+ * pass.  lower_out must be at least MAX_TOKEN_LENGTH bytes.  Tokens longer than
+ * MAX_TOKEN_LENGTH-1 are silently truncated; the subsequent lookup will produce a miss, which
+ * is safe.
+ */
+static void token_compute_prehash(const char *token,
+                                  char *lower_out,
+                                  uint32_t *out_raw_hash,
+                                  uint16_t *out_len,
+                                  uint16_t *out_fp)
+{
+    uint32_t h = 5381;
+    uint16_t l = 0;
+    const char *p = token;
+    char *q = lower_out;
+
+    while (*p && l < (uint16_t)(MAX_TOKEN_LENGTH - 1)) {
+        unsigned char c  = (unsigned char)*p;
+        unsigned char lc = (c >= 'A' && c <= 'Z') ? (unsigned char)(c + 32) : c;
+        *q = (char)lc;
+        h = ((h << 5) + h) + (uint32_t)lc;
+        p++; q++; l++;
+    }
+    *q = '\0';
+    *out_raw_hash = h;
+    *out_len = l;
+    *out_fp  = (uint16_t)(h & 0xFFFFU);
+}
+
+/*------------------------------------------------------------------------*/
+/* Step B: per-field pack match hit counters (profiling builds only) */
+
+#if TLV_PROFILE_ENABLE
+#define PACK_FIELD_PROFILE_MAX_SLOTS 64
+static uint32_t g_pack_field_hits[PACK_FIELD_PROFILE_MAX_SLOTS];
+static const char *g_pack_field_names[PACK_FIELD_PROFILE_MAX_SLOTS];
+static uint32_t g_pack_field_slot_count = 0;
+
+static void pack_field_record_hit(const char *field_name)
+{
+    uint32_t i;
+    if (!field_name) {
+        return;
+    }
+    for (i = 0; i < g_pack_field_slot_count; i++) {
+        if (g_pack_field_names[i] && strcmp(g_pack_field_names[i], field_name) == 0) {
+            g_pack_field_hits[i]++;
+            return;
+        }
+    }
+    if (g_pack_field_slot_count < PACK_FIELD_PROFILE_MAX_SLOTS) {
+        g_pack_field_names[g_pack_field_slot_count] = field_name;
+        g_pack_field_hits[g_pack_field_slot_count]  = 1;
+        g_pack_field_slot_count++;
+    }
+}
+#endif /* TLV_PROFILE_ENABLE */
+
+void filename_processor_print_pack_field_stats(FILE *stream)
+{
+#if TLV_PROFILE_ENABLE
+    uint32_t i;
+    if (!stream) {
+        return;
+    }
+    fprintf(stream, "pack_field_hit_counts       (%lu unique fields):\n",
+            (unsigned long)g_pack_field_slot_count);
+    for (i = 0; i < g_pack_field_slot_count; i++) {
+        fprintf(stream, "  %-28s = %lu\n",
+                g_pack_field_names[i] ? g_pack_field_names[i] : "(null)",
+                (unsigned long)g_pack_field_hits[i]);
+    }
+#else
+    (void)stream;
+#endif
+}
+
 /*------------------------------------------------------------------------*/
 /* Filename Sanitization */
 
@@ -421,7 +499,10 @@ ProcessingResult language_parser_parse_token(const char *language_token,
 
     /* Parse each 2-character language code */
     for (size_t i = 0; i < len; i += 2) {
-        char lang_code[3] = {language_token[i], language_token[i+1], '\0'};
+        char c0 = language_token[i]; char c1 = language_token[i+1];
+        if (c0 >= 'A' && c0 <= 'Z') c0 = (char)(c0 + 32);
+        if (c1 >= 'A' && c1 <= 'Z') c1 = (char)(c1 + 32);
+        char lang_code[3] = {c0, c1, '\0'};
         uint32_t lang_id;
 
         /* Look up language code in CSV */
@@ -529,7 +610,6 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
                                                 TLV_Record *output_record,
                                                 char *processed_filename,
                                                 ProcessingError *error) {
-    TLV_PROFILE_SCOPE(join_profile_stamp);
     TLV_PROFILE_SCOPE(lookup_profile_stamp);
     TLV_PROFILE_SCOPE(rebuild_profile_stamp);
     CSVCache *cfg_caches[32];
@@ -578,31 +658,35 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
         }
     }
 
+    /* Step 8: tokenize once, share parts[] across all fields.
+     * compact_token_parts() modifies parts[] in place so each field sees prior removals
+     * without re-copying or re-tokenizing processed_filename. One rebuild is done at the
+     * very end, only if at least one span was actually removed. */
+    char tmp[MAX_FILENAME_LENGTH];
+    char *parts[MAX_TOKENS];
+    uint32_t pc = 0;
+    bool any_span_removed = false;
+    {
+        size_t tlen = strlen(processed_filename);
+        if (tlen >= sizeof(tmp)) { tlen = sizeof(tmp) - 1; }
+        memcpy(tmp, processed_filename, tlen);
+        tmp[tlen] = '\0';
+    }
+    {
+        char *saveptr = NULL;
+        char *tok = whd_strtok_r(tmp, "_", &saveptr);
+        while (tok && pc < MAX_TOKENS) {
+            parts[pc++] = tok;
+            tok = whd_strtok_r(NULL, "_", &saveptr);
+        }
+    }
+
     /* For each configured field in order, attempt matches */
     for (uint32_t c = 0; c < cfg_count; c++) {
         const FieldPrescanConfig *cfg = &cfgs[c];
         bool field_changed;
         if (!cfg->enabled || !cfg->csv_base || cfg->csv_base[0] == '\0') {
             continue;
-        }
-
-        /* Tokenize a transient copy (do not modify processed_filename directly for joins) */
-        char tmp[MAX_FILENAME_LENGTH];
-        {
-            size_t tlen = strlen(processed_filename);
-            if (tlen >= sizeof(tmp)) { tlen = sizeof(tmp) - 1; }
-            memcpy(tmp, processed_filename, tlen);
-            tmp[tlen] = '\0';
-        }
-
-        /* Split by underscores */
-        char *parts[MAX_TOKENS];
-        uint32_t pc = 0;
-        char *saveptr = NULL;
-        char *tok = whd_strtok_r(tmp, "_", &saveptr);
-        while (tok && pc < MAX_TOKENS) {
-            parts[pc++] = tok;
-            tok = whd_strtok_r(NULL, "_", &saveptr);
         }
 
         /* any_found reserved for future logging; avoid unused on host */
@@ -623,34 +707,49 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
                     continue;
                 }
 
-                for (uint32_t i = 0; i + window <= pc; i++) {
-                /* Build joined token */
-                char joined[MAX_TOKEN_LENGTH];
-                TLV_PROFILE_START(join_profile_stamp);
-                if (!build_joined_token(joined, sizeof(joined), parts, i, window)) {
-                    joined[0] = '\0';
+                /* Prune: skip window sizes outside this CSV's token-count range.
+                 * min_token_count/max_token_count are set at CSV load time and
+                 * reflect the actual range of underscore-separated part counts
+                 * across all entries. A window that is too wide or too narrow
+                 * can never match, so skip building the joined string entirely. */
+                if (cfg_caches[c] != NULL &&
+                    (window < (uint32_t)cfg_caches[c]->min_token_count ||
+                     window > (uint32_t)cfg_caches[c]->max_token_count)) {
+                    continue;
                 }
-                TLV_PROFILE_END(TLV_PROFILE_SECTION_PRESCAN_JOIN_CONSTRUCTION, join_profile_stamp);
-                if (joined[0] == '\0') { continue; }
 
+                for (uint32_t i = 0; i + window <= pc; i++) {
+                /* Span-based lookup: hash and compare directly against parts[i..i+window-1]
+                 * without materialising an intermediate joined string (Step 7). */
+                TLV_PROFILE_START(lookup_profile_stamp);
+                uint32_t id;
+                if (cfg_caches[c] != NULL) {
+                    id = csv_cache_lookup_span(cfg_caches[c], parts, i, window);
+                } else {
+                    /* Cold path: no pre-resolved cache — materialise and use slow lookup */
+                    char joined[MAX_TOKEN_LENGTH];
+                    if (!build_joined_token(joined, sizeof(joined), parts, i, window) ||
+                        joined[0] == '\0') {
+                        TLV_PROFILE_END(TLV_PROFILE_SECTION_PRESCAN_CSV_LOOKUP, lookup_profile_stamp);
+                        continue;
+                    }
+                    id = csv_cache_lookup(csv_manager, cfg->csv_base, joined);
+                }
+                TLV_PROFILE_END(TLV_PROFILE_SECTION_PRESCAN_CSV_LOOKUP, lookup_profile_stamp);
+
+                /* Debug: materialise joined string only for known debug filenames */
                 if (filename && (strstr(filename, "Kernal_Version") != NULL ||
                                  strstr(filename, "German_fix_by_Torti-the-Smurf") != NULL)) {
-                    append_to_log("PRESCAN TRY: field=%s csv=%s window=%lu token='%s'",
+                    char dbg_joined[MAX_TOKEN_LENGTH];
+                    build_joined_token(dbg_joined, sizeof(dbg_joined), parts, i, window);
+                    append_to_log("PRESCAN TRY: field=%s csv=%s window=%lu token='%s' id=%lu",
                                   cfg->field_name ? cfg->field_name : "?",
                                   cfg->csv_base ? cfg->csv_base : "",
                                   (unsigned long)window,
-                                  joined);
+                                  dbg_joined,
+                                  (unsigned long)id);
                 }
 
-        /* Lookup in CSV (column 1 as token) */
-        TLV_PROFILE_START(lookup_profile_stamp);
-        uint32_t id;
-        if (cfg_caches[c] != NULL) {
-            id = csv_cache_lookup_loaded(cfg_caches[c], joined);
-        } else {
-            id = csv_cache_lookup(csv_manager, cfg->csv_base, joined);
-        }
-        TLV_PROFILE_END(TLV_PROFILE_SECTION_PRESCAN_CSV_LOOKUP, lookup_profile_stamp);
                     if (id > 0) {
                     /* Add TLV entry storing the ID */
                     if (cfg->field_id != 0) {
@@ -660,7 +759,9 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
                     /* Targeted, low-noise debug for known sample names */
                     if (filename && (strstr(filename, "Kernal_Version") != NULL ||
                                      strstr(filename, "German_fix_by_Torti-the-Smurf") != NULL)) {
-                        append_to_log("PRESCAN MATCH: field=%s token='%s' id=%lu", cfg->field_name ? cfg->field_name : "?", joined, (unsigned long)id);
+                        char dbg_joined[MAX_TOKEN_LENGTH];
+                        build_joined_token(dbg_joined, sizeof(dbg_joined), parts, i, window);
+                        append_to_log("PRESCAN MATCH: field=%s token='%s' id=%lu", cfg->field_name ? cfg->field_name : "?", dbg_joined, (unsigned long)id);
                     }
                     /* mark that we matched; reserved for Amiga-only logging */
 #if PLATFORM_AMIGA
@@ -675,6 +776,7 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
                         compact_token_parts(parts, &pc, i, window);
                         field_changed = true;
                         removed_span = true;
+                        any_span_removed = true;
                         if (filename && (strstr(filename, "Kernal_Version") != NULL ||
                                          strstr(filename, "German_fix_by_Torti-the-Smurf") != NULL)) {
                             char debug_rebuild[MAX_FILENAME_LENGTH];
@@ -695,23 +797,15 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
                 }
             }
 
-            if (removed_span) {
-                TLV_PROFILE_START(rebuild_profile_stamp);
-                rebuild_filename_from_parts(processed_filename,
-                                            MAX_FILENAME_LENGTH,
-                                            parts,
-                                            pc);
-                TLV_PROFILE_END(TLV_PROFILE_SECTION_PRESCAN_REBUILD_STRIP, rebuild_profile_stamp);
-            }
         } while (pc > 0 && cfg->remove_from_filename && field_changed);
+        /* No per-field rebuild: the next field reads parts[] directly (Step 8). */
+    }
 
-        if (!field_changed) {
-            rebuild_filename_from_parts(processed_filename,
-                                        MAX_FILENAME_LENGTH,
-                                        parts,
-                                        pc);
-        }
-        /* any_found reserved for future logging */
+    /* Single rebuild after all fields: only when at least one span was removed. */
+    if (any_span_removed) {
+        TLV_PROFILE_START(rebuild_profile_stamp);
+        rebuild_filename_from_parts(processed_filename, MAX_FILENAME_LENGTH, parts, pc);
+        TLV_PROFILE_END(TLV_PROFILE_SECTION_PRESCAN_REBUILD_STRIP, rebuild_profile_stamp);
     }
 
     return PROCESSING_SUCCESS;
@@ -946,6 +1040,14 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
         const char *ampersand_parts[MAX_TOKENS];
         uint32_t ampersand_part_count = 0;
         char ampersand_buffer[MAX_TOKEN_LENGTH];
+        /* Step A: prehash state for plain token and &-split parts */
+        char lower_token[MAX_TOKEN_LENGTH];
+        uint32_t token_raw_hash;
+        uint16_t token_prehash_len;
+        uint16_t token_prehash_fp;
+        uint32_t amp_raw_hash[MAX_TOKENS];
+        uint16_t amp_prehash_len[MAX_TOKENS];
+        uint16_t amp_prehash_fp[MAX_TOKENS];
         bool version_candidate;
         bool language_candidate;
         bool sps_candidate;
@@ -1046,6 +1148,7 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
                 size_t token_length = strlen(token);
                 char *ampersand_saveptr = NULL;
                 char *ampersand_part;
+                uint32_t pi;
 
                 if (token_length >= sizeof(ampersand_buffer)) {
                     token_length = sizeof(ampersand_buffer) - 1;
@@ -1058,7 +1161,30 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
                     ampersand_parts[ampersand_part_count++] = ampersand_part;
                     ampersand_part = whd_strtok_r(NULL, "&", &ampersand_saveptr);
                 }
+
+                /* Step A: lowercase each part in-place and precompute hash/len/fp once.
+                 * Parts live in ampersand_buffer which is mutable, so in-place is safe. */
+                for (pi = 0; pi < ampersand_part_count; pi++) {
+                    uint32_t h = 5381;
+                    uint16_t l = 0;
+                    char *pw = (char *)ampersand_parts[pi];
+                    while (*pw) {
+                        unsigned char c  = (unsigned char)*pw;
+                        unsigned char lc = (c >= 'A' && c <= 'Z') ? (unsigned char)(c + 32) : c;
+                        *pw = (char)lc;
+                        h = ((h << 5) + h) + (uint32_t)lc;
+                        l++;
+                        pw++;
+                    }
+                    amp_raw_hash[pi]    = h;
+                    amp_prehash_len[pi] = l;
+                    amp_prehash_fp[pi]  = (uint16_t)(h & 0xFFFFU);
+                }
             }
+
+            /* Step A: lowercase + hash the plain token once, before the field loop. */
+            token_compute_prehash(token, lower_token, &token_raw_hash,
+                                  &token_prehash_len, &token_prehash_fp);
 
             TLV_PROFILE_START(pack_field_match_profile_stamp);
             uint32_t matcher_total = pack_matchers ? pack_matcher_count : (uint32_t)pack_info->num_fields;
@@ -1075,15 +1201,19 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
                     continue; /* No CSV backing for this field */
                 }
 
-                /* If token contains '&', split into parts and attempt each; robust to INI flag omissions */
+                /* If token contains '&', try each already-lowercased sub-part */
                 if (ampersand_part_count > 0) {
                     bool any_match = false;
                     for (uint32_t part_index = 0; part_index < ampersand_part_count; part_index++) {
-                        const char *part_buf = ampersand_parts[part_index];
+                        const char *part_buf = ampersand_parts[part_index]; /* lowercase (Step A) */
 
                         if (part_buf && part_buf[0] != '\0') {
                             processing_error_init(&step_error, "csv_token_matcher");
-                            if ((resolved_cache != NULL && (token_id = csv_cache_lookup_loaded(resolved_cache, part_buf)) != 0) ||
+                            if ((resolved_cache != NULL &&
+                                 (token_id = csv_cache_lookup_prehashed(resolved_cache, part_buf,
+                                                                        amp_prehash_len[part_index],
+                                                                        amp_prehash_fp[part_index],
+                                                                        amp_raw_hash[part_index])) != 0) ||
                                 (resolved_cache == NULL &&
                                  csv_token_matcher_lookup(part_buf, csv_name, field_registry,
                                                        csv_manager, &token_id, &step_error) == PROCESSING_SUCCESS)) {
@@ -1104,10 +1234,19 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
                         }
                     }
 
-                    if (any_match) { token_processed = true; break; }
+                    if (any_match) {
+#if TLV_PROFILE_ENABLE
+                        pack_field_record_hit(field_name);
+#endif
+                        token_processed = true;
+                        break;
+                    }
                 } else {
                     processing_error_init(&step_error, "csv_token_matcher");
-                    if ((resolved_cache != NULL && (token_id = csv_cache_lookup_loaded(resolved_cache, token)) != 0) ||
+                    if ((resolved_cache != NULL &&
+                         (token_id = csv_cache_lookup_prehashed(resolved_cache, lower_token,
+                                                                token_prehash_len, token_prehash_fp,
+                                                                token_raw_hash)) != 0) ||
                         (resolved_cache == NULL &&
                          csv_token_matcher_lookup(token, csv_name, field_registry,
                                                csv_manager, &token_id, &step_error) == PROCESSING_SUCCESS)) {
@@ -1123,6 +1262,9 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
                                          csv_name, (unsigned long)token_id, csv_field_id);
 #endif
                         }
+#if TLV_PROFILE_ENABLE
+                        pack_field_record_hit(field_name);
+#endif
                         token_processed = true;
                         break;
                     }

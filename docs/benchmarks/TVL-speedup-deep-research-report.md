@@ -9,27 +9,41 @@ The ranking below is by expected total speedup on your measured workload, not by
 1. **Turn prescan into a pruned span walker instead of a per-field, per-window string builder.**  
    Highest expected gain. This directly attacks the 64.2% `prescan` bucket and the 35.7% `prescan_lookup` bucket by reducing how many candidate windows ever reach `csv_cache_lookup()`.
 
+> **Status (2026-05-05, updated):** Partially applied. `csv_cache_lookup_span()` exists and is the hot-path prescan lookup (no intermediate joined string). `CSVCache` now stores `min_token_count`/`max_token_count` (prescan window-count pruning) and `min_entry_len`/`max_entry_len` (Step D: length triage gate before the probe loop). The gate eliminates ~73% of `prescan` cost on host (3.7ms → 1.0ms). Still not applied: the position-outer/window-inner loop inversion; a first-token or first-byte discriminator; the per-field × per-window candidate-generation order. The prescan loop still iterates field × window × position but the per-candidate cost is now near zero for length-mismatched windows.
+
 2. **Stop rebuilding and re-tokenising after every removable prescan match.**  
    Also potentially a very large gain. The current restart path multiplies work that was already expensive.
+
+> **Status (2026-05-05):** Partially applied. `compact_token_parts()` removes matched spans in-place from the `parts[]` array, avoiding a full re-tokenize from the raw filename string. The `do...while(field_changed)` loop continues per-field without re-parsing text. However, `rebuild_filename_from_parts()` is still called after each field pass to update `processed_filename`, and each field still works from a freshly copied `tmp[]` buffer rather than a single persistent token array shared across all fields.
 
 3. **Split `csv_cache_lookup()` into a hot loaded-cache path and a cold manager/lazy-load path, and pass pre-resolved cache handles or small ids.**  
    High expected gain. This removes repeated manager-name scans and repeated lazy-load branching from every lookup.
 
+> **Status (2026-05-05, updated):** Substantially applied. `csv_cache_lookup_loaded(CSVCache *, token)` exists and is profiled. In the prescan hot path, `cfg_caches[]` is pre-resolved via `csv_cache_get_or_load()` before the field loop, so `csv_cache_lookup_span()` (span-based) or `csv_cache_lookup_loaded()` is called directly inside the hot window loop. In pack_field_match, `build_pack_field_matchers()` pre-resolves `resolved_cache` pointers per pack type and the inner matcher loop calls `csv_cache_lookup_prehashed()` (Step A) when a resolved cache is present. Fields with no backing CSV file now have `generic_csv_match_enabled = false` (publisher fix — eliminated 14.9ms guaranteed-miss slow-path). Minor remaining gap: secondary callers — `csv_token_matcher_lookup()`, `contributor_extractor_process()`, and the language parser fallback — still go through the slow `csv_cache_lookup()` manager path.
+
 4. **Canonicalise case once and demote `csv_cache_find_ci()` to an instrumented cold path.**  
    High expected gain if the fallback fires at all; medium gain if it is rare. The important point is that the current fallback turns a miss into a full-table scan.
+
+> **Status (2026-05-05, updated):** Applied. `csv_cache_insert()` lowercases every token via an ASCII fold before inserting into the hash table, so all stored tokens are canonical lowercase. `csv_cache_find()`, `csv_cache_find_prehashed()`, and `csv_cache_lookup_span()` all look up lowercase keys only. `csv_cache_find_ci()` is compiled out of non-profiling builds (`#if TLV_PROFILE_ENABLE`). In profiling builds, `csv_find_ci_calls` and `csv_find_ci_hits` counters exist; the corpus run shows `csv_find_ci_hits = 0` confirming the exact path covers all real tokens.
 
 5. **Make hash misses cheaper: power-of-two capacities, bitmask wrap, short metadata before `strcmp()`, and a lower load factor for miss-heavy tables.**  
    Medium-to-high expected gain. Your prescan workload is exactly the kind of workload where miss cost matters more than hit cost.
 
+> **Status (2026-05-05, updated):** Substantially applied. Power-of-two capacities: done. Bitmask wrap `& (capacity - 1)`: done in all probe loops. `CSVEntry` has `uint16_t len` and `uint16_t fingerprint` (low 16 bits of djb2): done, populated in `csv_cache_insert()`, checked before `strcmp()` in all three find paths. `min_entry_len`/`max_entry_len` length triage gate added (Step D): eliminates the probe entirely for impossible-length candidates. Remaining: load factor is still 0.75 and is not lowered for prescan-facing tables. Load factor reduction is deferred — the length gate already eliminates the vast majority of miss-path probe calls (prescan_lookup went from 0.178ms → 0.002ms for 43806 calls).
+
 6. **Flatten `pack_field_match`: pre-resolve field-to-cache bindings, split `&` once, and reorder field tests by likely hit probability.**  
    Medium expected gain. This should improve the 13.8% `pack_field_match` bucket and share the same lookup improvements as prescan.
+
+> **Status (2026-05-05, updated):** Mostly applied. Pre-resolve done. Field ordering by corpus hit probability done (Step C: insertion sort on `s_field_priority_order[]` in `build_pack_field_matchers()` — chipset first, compilations last; `csv_find_ci_calls` dropped 41%, `token_loop` dropped 57%). Token prehashing done (Step A: `csv_cache_lookup_prehashed()` reuses precomputed lowercase/hash/len/fp across all N matchers per token). Missing-CSV fields disabled at build time (publisher fix). Remaining: the `&` split is still performed once per field iteration rather than once per token before the field loop. Minor because pack_field_match now costs 0.011ms total.
 
 7. **Special-case tiny fixed CSVs with sorted arrays or generated perfect hashes.**  
    Medium-to-low expected gain overall, but potentially excellent for a few hot, small vocabularies.
 
+> **Status (2026-05-05, updated):** Not applied. All CSVs use the same generic linear-probing hash table regardless of vocabulary size. Deferred — with the length triage gate in place, the miss cost for tiny tables (chipset: 3-char entries only) is already near zero, so the primary motivation for tiny-table specialisation (reducing miss overhead) is substantially addressed. Revisit if Amiga hardware profiling reveals a different distribution.
+
 8. **Compiler tuning and tiny assembly helpers only after the work-reduction patches land.**  
    Lowest expected gain. Worth doing, but only after the algorithmic fixes. GCC’s documented optimization defaults and `gperf`’s documented design both reinforce the same point: structural reductions usually dominate small local codegen wins. citeturn15view0turn18view3
-
+> **Status (2026-05-05, updated):** Still deferred, but now appropriate to consider. All major structural patches (Recs 1–6) have substantially landed. The host pipeline is at ~9ms wall-clock with all sections at profiling noise floor. Compiler tuning (vbcc `-inline-size`/`-inline-depth`, GCC `-O3`) is now the next reasonable step — specifically for the Amiga build where function call overhead is higher and the hot loop is `prescan_and_strip_tokens()` + `csv_cache_lookup_span()` + the field probe.
 ## Prescan path
 
 **Recommendation: invert and prune candidate generation, and move to span-based lookup rather than rebuilding joined strings.**
@@ -71,7 +85,9 @@ Low to medium. Length/count pruning is very safe. First-token or position-based 
 **How to test it safely:**  
 Keep the old prescan as a host-build reference. For every input filename in your corpus, compare exact extracted metadata, exact removed spans, and exact final stripped filename. Add a property-style test that enumerates token windows and verifies old joined-string lookup and new span lookup return identical ids.
 
-A particularly useful sub-optimization here is to cap the outer window length globally. If the enabled prescan fields only contain entries up to, say, three tokens, then every four-token, five-token, and six-token candidate is impossible by construction and should never be built. That is a tiny patch with a potentially large effect.
+> **Status (2026-05-05, updated):** Partially applied. `csv_cache_lookup_span()` is the prescan hot path (no intermediate joined string; hash computed directly from the span). `CSVCache` stores `min_token_count`/`max_token_count` for window-count pruning and `min_entry_len`/`max_entry_len` for length triage (Step D). The length gate fires before the probe for every window whose joined length is outside the cache's entry bounds — this accounts for the majority of candidate windows and drove `prescan` from 3.7ms → 1.0ms. Not yet applied: the position-outer/window-inner loop inversion; suffix/tail-biased scanning; per-field first-token discriminators.
+
+**Recommendation: eliminate full rebuild and full re-tokenisation after each removable match.** If the enabled prescan fields only contain entries up to, say, three tokens, then every four-token, five-token, and six-token candidate is impossible by construction and should never be built. That is a tiny patch with a potentially large effect.
 
 A second useful sub-optimization is positional pruning. Your examples are suffix-shaped, with tags such as chipset and language toward the end of the archive name. If a corpus diff confirms that those prescan classes are suffix-only in practice, shift the scanner to the tail first, or introduce a strict suffix-only mode for those fields. That can collapse the search space dramatically, but it should be gated by corpus evidence because it is a semantic assumption rather than a mere data-structure improvement.
 
@@ -96,6 +112,8 @@ Medium. You must preserve current semantics when a removal exposes a new multi-t
 
 **How to test it safely:**  
 Run both implementations side by side on the full corpus and compare full TLV output, not just individual fields. Also add targeted regression cases where removing one token makes a new multi-token removable phrase visible across the gap.
+
+> **Status (2026-05-05):** Partially applied. `compact_token_parts()` removes matched spans in-place from the `parts[]` array (no re-parse of the raw string). The `do...while(field_changed)` loop continues per-field without reparsing text. The costly "copy filename → re-split from scratch → restart all fields" pattern is gone. Not yet applied: each field still starts from a freshly-copied `tmp[]` buffer, so the token array is not shared across fields; `rebuild_filename_from_parts()` is still called after each field to keep `processed_filename` current; consumed-token bitset / alive-array approach not used.
 
 ## Lookup flattening and case canonicalisation
 
@@ -135,6 +153,8 @@ Keep the old API as a wrapper around the new hot/cold split initially. Verify th
 
 My expectation is that manager-name lookup is worth removing, but I would still measure it explicitly rather than assume it is the entire problem.
 
+> **Status (2026-05-05):** Substantially applied — see Ranked Rec 3 above for detail.
+
 **Recommendation: canonicalise once and move `csv_cache_find_ci()` out of the hot path.**
 
 This is the most obviously suspicious part of the current lookup stack. Exact lookup is fast-ish; the fallback is not. If the exact path misses and the code then scans the entire table with case-insensitive comparison, you have turned a hash miss into a linear full-table walk.
@@ -165,6 +185,8 @@ Low for ASCII-only tokens. Medium if the token universe may contain non-ASCII or
 
 **How to test it safely:**  
 Phase it in. First canonicalise but keep the fallback, with counters and sampled logging of fallback hits. If corpus and real runs show zero or negligible hits, compile the fallback out of the release hot path.
+
+> **Status (2026-05-05, updated):** Applied — see Ranked Rec 4 above for detail. `csv_find_ci_hits = 0` confirmed across the full corpus.
 
 ## Hash table structure for 68k
 
@@ -201,6 +223,8 @@ Low. Fingerprints only guard `strcmp()`, not replace it, so they cannot introduc
 **How to test it safely:**  
 Add a microbenchmark that runs known-hit and known-miss lookups against representative CSVs. Benchmark at several load factors. The key question is not just average probe length, but average string comparisons per miss.
 
+> **Status (2026-05-05, updated):** Substantially applied — see Ranked Rec 5 above for detail. Bitmask wrap, `len`/`fingerprint` in `CSVEntry`, and the Step D `min_entry_len`/`max_entry_len` triage gate are all done. Remaining: load factor is still 0.75. With the length gate eliminating most miss-path probes, lowering the load factor is low priority.
+
 I would **not** switch to double hashing first. The literature is right that double hashing reduces the clustering problem that linear probing exhibits, but it also adds another hash function and arithmetic in the probe loop. On your CPU family, I would first keep linear probing, lower the load factor, remove modulo, and reduce `strcmp()` frequency. Only if instrumentation still shows long pathological runs would I revisit probe policy. citeturn13view2turn13view0turn5view2
 
 **Recommendation: use selective tiny-table alternatives for tiny, fixed vocabularies.**
@@ -224,6 +248,8 @@ Low if generated from the CSV source during the build and validated automaticall
 
 **How to test it safely:**  
 Start with one or two very small, very hot CSVs. Keep the generic path in place for everything else. Use build-time generation and compare generated ids against the CSV loader on the host build.
+
+> **Status (2026-05-05):** Not applied — see Ranked Rec 7 above for detail.
 
 ## Pack-field matcher
 
@@ -262,6 +288,8 @@ Low. You are mostly moving decisions from runtime repetition into precomputed se
 
 **How to test it safely:**  
 Unit-test per-token behavior for plain tokens and ampersand-composite tokens. Then run the full corpus diff to verify that field resolution and tie-breaking are unchanged.
+
+> **Status (2026-05-05, updated):** Mostly applied — see Ranked Rec 6 above for detail. Field ordering by hit probability is now done (Step C). Token prehashing is done (Step A). Next remaining step: hoist the `&` split out of the field loop. With pack_field_match at 0.011ms total this is low priority on host; revisit after Amiga hardware profiling.
 
 ## 68k-specific C and compiler notes
 
@@ -330,3 +358,19 @@ The short version is: **measure first, then flatten hot lookup, then kill the ca
 There are three material open questions that affect exact prioritization. The first is how often `csv_cache_find_ci()` actually fires; if it is nearly zero, the fallback is a correctness cleanup more than a speed win. The second is the actual size distribution of your CSVs; that determines where sorted arrays or generated perfect hashes become attractive. The third is whether your real corpus supports suffix-only assumptions for some prescan fields. Until those are measured, exact speedup estimates should be treated as directional rather than guaranteed.
 
 My highest-confidence conclusion is straightforward: **the first big speedup will come from reducing candidate count and restart count, and the next one will come from turning `csv_cache_lookup()` into a true hot-path function over already-loaded, already-canonical caches.** The rest matters, but those two changes are where classic 68k hardware is most likely to reward you.
+
+---
+
+## Patch order status (2026-05-05)
+
+| Step | Description | Status |
+|------|-------------|--------|
+| 1 | Add counters before changing behaviour | **Done** — `TLV_PROFILE_SCOPE/START/END` profiling macros cover all major sections. `csv_find_ci_calls`, `csv_find_ci_hits`, and per-field pack hit counters (Step B) added. `hash_probe_steps_miss` and `prescan_restarts` counters not added (prescan miss cost is now near zero so not worth instrumenting). |
+| 2 | `csv_cache_lookup_loaded()` + pre-resolve cache handles | **Done** — prescan pre-resolves `cfg_caches[]`; pack matcher pre-resolves `resolved_cache`; hot paths call `csv_cache_lookup_span()` / `csv_cache_lookup_prehashed()` directly. |
+| 3 | Canonicalise lowercase once; `csv_cache_find_ci()` as counted fallback only | **Done** — `csv_cache_insert()` lowercases at load time. `csv_cache_find_ci()` compiled out behind `#if TLV_PROFILE_ENABLE`. `csv_find_ci_calls`/`csv_find_ci_hits` counters added. Corpus confirms `csv_find_ci_hits = 0`. |
+| 4 | Add `len` + fingerprint to `CSVEntry`; bitmask wrap in probe loop; `min_entry_len`/`max_entry_len` triage | **Done** — `uint16_t len` and `uint16_t fingerprint` in `CSVEntry`, populated in insert, checked before `strcmp()` in all three find paths. Bitmask `& (capacity - 1)` in all probe loops. `min_entry_len`/`max_entry_len` length triage gate (Step D) added to all three probe paths. Load factor still 0.75 (deferred — length gate makes it low priority). |
+| 5 | Flatten `pack_field_match`: pre-resolve + field ordering + token prehash | **Mostly done** — cache pre-resolve done; field ordering by corpus hit rate done (Step C, insertion sort); token prehash done (Step A, `csv_cache_lookup_prehashed()`); missing-CSV fields disabled at build time. Remaining: `&` split still per field-iteration rather than once per token. |
+| 6 | Add prescan pruning metadata (token-count caps, length masks) | **Done** — `min_token_count`/`max_token_count` for window-count pruning; `min_entry_len`/`max_entry_len` for length triage (Step D). Combined effect: `prescan` 3.7ms → 1.0ms (−73%), `prescan_lookup` 43806 calls → 0.002ms total. |
+| 7 | Rework prescan to span-based lookup; eliminate joined-string builds | **Partially done** — `csv_cache_lookup_span()` is the prescan hot path (no joined string). Loop inversion (position-outer/window-inner) not done. At noise floor on host; revisit after Amiga hardware test. |
+| 8 | Remove per-field `tmp[]` copy + per-field `rebuild_filename_from_parts()` | **Not done** — requires a single shared token array with per-token alive flags across all prescan fields. |
+| 9 | Suffix/tail-biased prescan modes; tiny-table specialisations | **Not done** — deferred pending corpus evidence and Amiga hardware profiling. |

@@ -134,6 +134,33 @@ static bool pack_field_uses_generic_csv_match(const char *field_name)
     return true;
 }
 
+/* Step C: corpus-derived hit order (descending). Any field not listed
+ * gets pushed to the end so frequently-matching fields are tested first. */
+static const char * const s_field_priority_order[] = {
+    "chipset",        /* 385 */
+    "video",          /* 241 */
+    "memory",         /* 147 */
+    "disks",          /*  44 */
+    "software_houses",/*  42 */
+    "media",          /*  19 */
+    "cover_disks",    /*   8 */
+    "crack_groups",   /*   4 */
+    "compilations",   /*   3 */
+    NULL
+};
+
+static uint32_t field_priority_index(const char *field_name)
+{
+    uint32_t i = 0;
+    while (s_field_priority_order[i] != NULL) {
+        if (strcmp(s_field_priority_order[i], field_name) == 0) {
+            return i;
+        }
+        i++;
+    }
+    return i; /* unlisted fields sort to end */
+}
+
 static PackFieldMatcher *build_pack_field_matchers(const PackType *pack_info,
                                                    const FieldRegistry *field_registry,
                                                    GlobalCSVManager *csv_manager,
@@ -167,6 +194,31 @@ static PackFieldMatcher *build_pack_field_matchers(const PackType *pack_info,
         matchers[index].generic_csv_match_enabled = pack_field_uses_generic_csv_match(field_name);
         if (csv_manager->cache_enabled && matchers[index].csv_name && matchers[index].csv_name[0] != '\0') {
             matchers[index].resolved_cache = csv_cache_get_or_load(csv_manager, matchers[index].csv_name);
+        }
+        /* If caching is enabled but the CSV still couldn't be loaded (file absent), any
+         * slow-path lookup for this field will also return 0.  Disable generic CSV match
+         * now so the hot loop never wastes time on a guaranteed miss. */
+        if (matchers[index].generic_csv_match_enabled &&
+            matchers[index].csv_name && matchers[index].csv_name[0] != '\0' &&
+            csv_manager->cache_enabled &&
+            matchers[index].resolved_cache == NULL) {
+            matchers[index].generic_csv_match_enabled = false;
+        }
+    }
+
+    /* Step C: insertion-sort matchers by ascending priority index so
+     * the most frequently-matching fields are tested first at runtime. */
+    {
+        uint32_t i, j;
+        for (i = 1; i < count; i++) {
+            PackFieldMatcher key = matchers[i];
+            uint32_t pri = field_priority_index(key.field_name);
+            j = i;
+            while (j > 0 && field_priority_index(matchers[j - 1].field_name) > pri) {
+                matchers[j] = matchers[j - 1];
+                j--;
+            }
+            matchers[j] = key;
         }
     }
 

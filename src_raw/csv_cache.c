@@ -42,21 +42,31 @@
 #define CSV_UNKNOWN_TOKENS_INITIAL      32
 
 /*------------------------------------------------------------------------*/
+/* Diagnostic counters (profiling builds only) */
+
+#if TLV_PROFILE_ENABLE
+static uint32_t g_csv_find_ci_calls = 0;
+static uint32_t g_csv_find_ci_hits  = 0;
+#endif
+
+/*------------------------------------------------------------------------*/
 /* Internal Hash Table Functions */
 
 /**
  * @brief Simple djb2 hash function for token lookup
+ * Returns the raw hash value; callers apply the capacity mask.
+ * Capacity is always a power of two, so use (hash & (capacity-1)) not (hash % capacity).
  */
-static uint32_t csv_hash_token(const char *token, uint32_t capacity) {
+static uint32_t csv_hash_token(const char *token) {
     uint32_t hash = 5381;
     const unsigned char *str = (const unsigned char *)token;
     int c;
 
     while ((c = *str++)) {
-        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+        hash = ((hash << 5) + hash) + (uint32_t)c; /* hash * 33 + c */
     }
 
-    return hash % capacity;
+    return hash;
 }
 
 /**
@@ -154,33 +164,71 @@ static bool csv_token_exists_in_any_csv(GlobalCSVManager *mgr, const char *token
  * @brief Insert token-ID pair into CSV cache hash table
  */
 static bool csv_cache_insert(CSVCache *cache, const char *token, const char *long_name, uint32_t id) {
+    char lower[CSV_MAX_TOKEN_LENGTH];
+    const char *p;
+    char *q;
+    uint32_t index;
+    uint32_t original_index;
+
     if (!cache || !token || cache->entry_count >= cache->capacity) {
         return false;
     }
 
-    uint32_t index = csv_hash_token(token, cache->capacity);
-    uint32_t original_index = index;
+    /* Lowercase the incoming token so hash and probe use the canonical form */
+    p = token;
+    q = lower;
+    while (*p && (size_t)(q - lower) < sizeof(lower) - 1) {
+        *q = (*p >= 'A' && *p <= 'Z') ? (char)(*p + 32) : *p;
+        p++; q++;
+    }
+    *q = '\0';
 
-    /* Linear probing for collision resolution */
-    while (cache->entries[index].token != NULL) {
-        /* Check for duplicate token */
-        if (strcmp(cache->entries[index].token, token) == 0) {
-            return false; /* Already exists */
+    {
+        uint32_t raw_hash = csv_hash_token(lower);
+        uint16_t ins_len  = (uint16_t)(q - lower);
+        uint16_t ins_fp   = (uint16_t)(raw_hash & 0xFFFFU);
+
+        /* Update per-entry length bounds (Step D: length triage gate) */
+        if (ins_len < cache->min_entry_len) cache->min_entry_len = ins_len;
+        if (ins_len > cache->max_entry_len) cache->max_entry_len = ins_len;
+
+        /* Count underscore-separated tokens for prescan prune metadata */
+        {
+            const char *r;
+            uint8_t tc = 1U;
+            for (r = lower; *r; r++) { if (*r == '_') tc++; }
+            if (tc < cache->min_token_count) cache->min_token_count = tc;
+            if (tc > cache->max_token_count) cache->max_token_count = tc;
         }
 
-        index = (index + 1) % cache->capacity;
-        if (index == original_index) {
-            return false; /* Table full */
+        index = raw_hash & (cache->capacity - 1U);
+        original_index = index;
+
+        /* Linear probing for collision resolution */
+        while (cache->entries[index].token != NULL) {
+            /* Cheap metadata pre-filter before strcmp */
+            if (cache->entries[index].len == ins_len &&
+                cache->entries[index].fingerprint == ins_fp &&
+                strcmp(cache->entries[index].token, lower) == 0) {
+                return false; /* Already exists */
+            }
+
+            index = (index + 1U) & (cache->capacity - 1U);
+            if (index == original_index) {
+                return false; /* Table full */
+            }
         }
-    }
 
-    /* Allocate and copy token string */
-    cache->entries[index].token = whd_malloc(strlen(token) + 1);
-    if (!cache->entries[index].token) {
-        return false;
-    }
+        /* Allocate and copy token string, already lowercased via `lower` */
+        cache->entries[index].token = whd_malloc((size_t)ins_len + 1);
+        if (!cache->entries[index].token) {
+            return false;
+        }
 
-    strcpy(cache->entries[index].token, token);
+        strcpy(cache->entries[index].token, lower);
+        cache->entries[index].len         = ins_len;
+        cache->entries[index].fingerprint = ins_fp;
+    }
     if (long_name && long_name[0] != '\0') {
         cache->entries[index].long_name = whd_malloc(strlen(long_name) + 1);
         if (!cache->entries[index].long_name) {
@@ -201,21 +249,50 @@ static bool csv_cache_insert(CSVCache *cache, const char *token, const char *lon
  * @brief Lookup token in CSV cache hash table
  */
 static uint32_t csv_cache_find(const CSVCache *cache, const char *token) {
+    char lower[CSV_MAX_TOKEN_LENGTH];
+    const char *p;
+    char *q;
+    uint32_t index;
+    uint32_t original_index;
+
     if (!cache || !token || cache->entry_count == 0) {
         return 0;
     }
 
-    uint32_t index = csv_hash_token(token, cache->capacity);
-    uint32_t original_index = index;
+    /* Lowercase the lookup key to match canonical stored tokens */
+    p = token;
+    q = lower;
+    while (*p && (size_t)(q - lower) < sizeof(lower) - 1) {
+        *q = (*p >= 'A' && *p <= 'Z') ? (char)(*p + 32) : *p;
+        p++; q++;
+    }
+    *q = '\0';
 
-    while (cache->entries[index].token != NULL) {
-        if (strcmp(cache->entries[index].token, token) == 0) {
-            return cache->entries[index].id;
+    {
+        uint32_t raw_hash = csv_hash_token(lower);
+        uint16_t look_len = (uint16_t)(q - lower);
+        uint16_t look_fp  = (uint16_t)(raw_hash & 0xFFFFU);
+
+        /* Length triage: impossible match if token is shorter or longer than any entry */
+        if (look_len < cache->min_entry_len || look_len > cache->max_entry_len) {
+            return 0;
         }
 
-        index = (index + 1) % cache->capacity;
-        if (index == original_index) {
-            break; /* Searched entire table */
+        index = raw_hash & (cache->capacity - 1U);
+        original_index = index;
+
+        while (cache->entries[index].token != NULL) {
+            /* Cheap pre-filter: length and fingerprint must match before strcmp() */
+            if (cache->entries[index].len == look_len &&
+                cache->entries[index].fingerprint == look_fp &&
+                strcmp(cache->entries[index].token, lower) == 0) {
+                return cache->entries[index].id;
+            }
+
+            index = (index + 1U) & (cache->capacity - 1U);
+            if (index == original_index) {
+                break; /* Searched entire table */
+            }
         }
     }
 
@@ -224,7 +301,10 @@ static uint32_t csv_cache_find(const CSVCache *cache, const char *token) {
 
 /**
  * @brief Case-insensitive lookup token in CSV cache hash table (linear scan fallback)
+ * Only compiled in profiling/debug builds. With canonical lowercase in csv_cache_find()
+ * this path should never return a hit; it exists solely to detect regressions.
  */
+#if TLV_PROFILE_ENABLE
 static uint32_t csv_cache_find_ci(const CSVCache *cache, const char *token) {
     if (!cache || !token || cache->entry_count == 0) {
         return 0;
@@ -239,6 +319,7 @@ static uint32_t csv_cache_find_ci(const CSVCache *cache, const char *token) {
     }
     return 0;
 }
+#endif /* TLV_PROFILE_ENABLE */
 
 /*------------------------------------------------------------------------*/
 /* CSV File Parsing */
@@ -418,6 +499,10 @@ static bool csv_load_file_into_cache(CSVCache *cache, const char *csv_path) {
     /* Initialize hash table */
     memset(cache->entries, 0, cache->capacity * sizeof(CSVEntry));
     cache->entry_count = 0;
+    cache->min_token_count = 255U; /* sentinel; updated by csv_cache_insert */
+    cache->max_token_count = 0U;
+    cache->min_entry_len = 65535U; /* sentinel; updated by csv_cache_insert */
+    cache->max_entry_len = 0U;
 
     /* Second pass: populate hash table */
     rewind(file);
@@ -735,6 +820,113 @@ CSVCache *csv_cache_get_or_load(GlobalCSVManager *manager, const char *csv_name)
     return &manager->caches[manager->cache_count - 1];
 }
 
+/**
+ * @brief Compare a stored lowercase token against a span of parts joined by '_'.
+ * Each part character is lowercased on the fly. No intermediate buffer required.
+ */
+static bool span_equals_token(const char *token,
+                              char *const *parts,
+                              uint32_t start,
+                              uint32_t window)
+{
+    const char *t = token;
+    uint32_t k;
+    const char *p;
+
+    for (k = 0; k < window; k++) {
+        p = parts[start + k];
+        if (!p) { return false; }
+        if (k > 0) {
+            if (*t != '_') { return false; }
+            t++;
+        }
+        while (*p) {
+            unsigned char c  = (unsigned char)*p;
+            unsigned char lc = (c >= 'A' && c <= 'Z') ? (unsigned char)(c + 32) : c;
+            if ((unsigned char)*t != lc) { return false; }
+            t++; p++;
+        }
+    }
+    return *t == '\0';
+}
+
+/**
+ * @brief Span-based lookup: compute hash and length directly from parts[start..start+window-1]
+ * joined by '_', without materialising an intermediate string.
+ * Produces identical results to csv_cache_lookup_loaded() on the equivalent joined string.
+ */
+uint32_t csv_cache_lookup_span(const CSVCache *cache,
+                               char *const *parts,
+                               uint32_t start,
+                               uint32_t window)
+{
+    uint32_t raw_hash;
+    uint16_t look_len;
+    uint16_t look_fp;
+    uint32_t index;
+    uint32_t original_index;
+    uint32_t k;
+    const char *p;
+    TLV_PROFILE_SCOPE(profile_stamp);
+
+    if (!cache || !parts || cache->entry_count == 0) {
+        return 0;
+    }
+
+    TLV_PROFILE_START(profile_stamp);
+
+    /* Compute djb2 hash and joined length directly from the span */
+    raw_hash = 5381;
+    look_len = 0;
+    for (k = 0; k < window; k++) {
+        p = parts[start + k];
+        if (!p) {
+            TLV_PROFILE_END(TLV_PROFILE_SECTION_CSV_LOOKUP_LOADED, profile_stamp);
+            return 0;
+        }
+        if (k > 0) {
+            raw_hash = ((raw_hash << 5) + raw_hash) + (uint32_t)'_';
+            look_len++;
+        }
+        while (*p) {
+            unsigned char c  = (unsigned char)*p;
+            unsigned char lc = (c >= 'A' && c <= 'Z') ? (unsigned char)(c + 32) : c;
+            raw_hash = ((raw_hash << 5) + raw_hash) + (uint32_t)lc;
+            look_len++;
+            p++;
+        }
+    }
+    if (look_len >= CSV_MAX_TOKEN_LENGTH) {
+        TLV_PROFILE_END(TLV_PROFILE_SECTION_CSV_LOOKUP_LOADED, profile_stamp);
+        return 0;
+    }
+
+    /* Length triage: impossible match if span length is outside the cache's entry bounds */
+    if (look_len < cache->min_entry_len || look_len > cache->max_entry_len) {
+        TLV_PROFILE_END(TLV_PROFILE_SECTION_CSV_LOOKUP_LOADED, profile_stamp);
+        return 0;
+    }
+
+    look_fp = (uint16_t)(raw_hash & 0xFFFFU);
+    index   = raw_hash & (cache->capacity - 1U);
+    original_index = index;
+
+    while (cache->entries[index].token != NULL) {
+        if (cache->entries[index].len == look_len &&
+            cache->entries[index].fingerprint == look_fp &&
+            span_equals_token(cache->entries[index].token, parts, start, window)) {
+            uint32_t id = cache->entries[index].id;
+            TLV_PROFILE_END(TLV_PROFILE_SECTION_CSV_LOOKUP_LOADED, profile_stamp);
+            return id;
+        }
+        index = (index + 1U) & (cache->capacity - 1U);
+        if (index == original_index) { break; }
+    }
+
+    TLV_PROFILE_END(TLV_PROFILE_SECTION_CSV_LOOKUP_LOADED, profile_stamp);
+    return 0;
+}
+
 uint32_t csv_cache_lookup_loaded(const CSVCache *cache, const char *token) {
     uint32_t id;
     TLV_PROFILE_SCOPE(profile_stamp);
@@ -746,13 +938,83 @@ uint32_t csv_cache_lookup_loaded(const CSVCache *cache, const char *token) {
     TLV_PROFILE_START(profile_stamp);
 
     id = csv_cache_find(cache, token);
+#if TLV_PROFILE_ENABLE
     if (id == 0) {
-        /* Fallback: case-insensitive match for minor case differences */
+        /* Debug-only fallback: should never return a hit after lowercase canonicalisation */
+        g_csv_find_ci_calls++;
         id = csv_cache_find_ci(cache, token);
+        if (id != 0) { g_csv_find_ci_hits++; }
     }
+#endif
 
     TLV_PROFILE_END(TLV_PROFILE_SECTION_CSV_LOOKUP_LOADED, profile_stamp);
 
+    return id;
+}
+
+/*
+ * Probe-only inner loop: caller has already lowercased the key and computed
+ * its djb2 hash, length, and fingerprint.  No lowercase copy, no hash pass.
+ */
+static uint32_t csv_cache_find_prehashed(const CSVCache *cache,
+                                         const char *lower,
+                                         uint16_t look_len,
+                                         uint16_t look_fp,
+                                         uint32_t raw_hash)
+{
+    uint32_t index;
+    uint32_t original_index;
+
+    if (!cache || !lower || cache->entry_count == 0) {
+        return 0;
+    }
+
+    /* Length triage: impossible match if token is shorter or longer than any entry */
+    if (look_len < cache->min_entry_len || look_len > cache->max_entry_len) {
+        return 0;
+    }
+
+    index          = raw_hash & (cache->capacity - 1U);
+    original_index = index;
+
+    while (cache->entries[index].token != NULL) {
+        if (cache->entries[index].len == look_len &&
+            cache->entries[index].fingerprint == look_fp &&
+            strcmp(cache->entries[index].token, lower) == 0) {
+            return cache->entries[index].id;
+        }
+        index = (index + 1U) & (cache->capacity - 1U);
+        if (index == original_index) {
+            break;
+        }
+    }
+
+    return 0;
+}
+
+uint32_t csv_cache_lookup_prehashed(const CSVCache *cache,
+                                    const char *lower,
+                                    uint16_t look_len,
+                                    uint16_t look_fp,
+                                    uint32_t raw_hash)
+{
+    uint32_t id;
+    TLV_PROFILE_SCOPE(profile_stamp);
+
+    if (!cache || !lower) {
+        return 0;
+    }
+
+    TLV_PROFILE_START(profile_stamp);
+    id = csv_cache_find_prehashed(cache, lower, look_len, look_fp, raw_hash);
+#if TLV_PROFILE_ENABLE
+    if (id == 0) {
+        g_csv_find_ci_calls++;
+        id = csv_cache_find_ci(cache, lower);
+        if (id != 0) { g_csv_find_ci_hits++; }
+    }
+#endif
+    TLV_PROFILE_END(TLV_PROFILE_SECTION_CSV_LOOKUP_LOADED, profile_stamp);
     return id;
 }
 
@@ -1346,5 +1608,18 @@ void csv_cache_report_summary(const GlobalCSVManager *manager) {
 }
 
 /*------------------------------------------------------------------------*/
+
+void csv_cache_print_stats(FILE *stream)
+{
+    if (!stream) {
+        return;
+    }
+#if TLV_PROFILE_ENABLE
+    fprintf(stream, "csv_find_ci_calls           = %lu\n", (unsigned long)g_csv_find_ci_calls);
+    fprintf(stream, "csv_find_ci_hits            = %lu\n", (unsigned long)g_csv_find_ci_hits);
+#else
+    (void)stream;
+#endif
+}
 
 /* End of Text */

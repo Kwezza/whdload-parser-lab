@@ -3,6 +3,8 @@
 #include <platform/platform_string.h>
 #include <tlv_filename/tlv_builder.h>
 #include <tlv_filename/tlv_profile.h>
+#include <tlv_filename/csv_cache.h>
+#include <tlv_filename/filename_processor.h>
 #include <tlv_filename/field_registry.h>
 #include <io/pack_types_loader.h>
 #include <io/writeLog.h>
@@ -334,6 +336,8 @@ static bool append_summary_log_file(const char *summary_log_path,
     if (tlv_profile_is_enabled()) {
         fprintf(summary_file, "\n");
         tlv_profile_print_summary(summary_file);
+        csv_cache_print_stats(summary_file);
+        filename_processor_print_pack_field_stats(summary_file);
     }
     fprintf(summary_file, "\n");
     whd_fclose(summary_file);
@@ -780,6 +784,8 @@ int main(int argc, char **argv)
         print_amiga_stage("printing profile summary");
 #endif
         tlv_profile_print_summary(stdout);
+        csv_cache_print_stats(stdout);
+        filename_processor_print_pack_field_stats(stdout);
         tlv_profile_log_summary();
     }
 

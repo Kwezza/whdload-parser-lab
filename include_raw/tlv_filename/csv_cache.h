@@ -34,9 +34,11 @@ struct AppCtx;
  * @brief Single CSV entry (token -> ID mapping)
  */
 typedef struct {
-    char *token;        /* The lookup key (e.g., "Cinemaware", "OCS", "En") */
+    char *token;        /* The lookup key (lowercase canonical, e.g., "cinemaware", "ocs", "en") */
     uint32_t id;        /* The CSV ID for this token */
     char *long_name;    /* Optional: full/wordy display name (e.g., "French") */
+    uint16_t len;       /* strlen(token) cached to reject mismatched-length candidates cheaply */
+    uint16_t fingerprint; /* Low 16 bits of djb2 hash, used as a fast pre-filter before strcmp() */
 } CSVEntry;
 
 /**
@@ -50,6 +52,10 @@ typedef struct {
     uint32_t memory_usage_kb; /* Memory footprint of this cache */
     bool has_default_token;   /* Whether a 'default' marker was present */
     uint32_t default_token_id;/* Token id marked as default (0 if none) */
+    uint8_t min_token_count;  /* Min underscore-token count across all entries (prescan prune) */
+    uint8_t max_token_count;  /* Max underscore-token count across all entries (prescan prune) */
+    uint16_t min_entry_len;   /* Shortest entry's strlen (length triage gate before probe) */
+    uint16_t max_entry_len;   /* Longest entry's strlen (length triage gate before probe) */
 } CSVCache;
 
 /**
@@ -160,6 +166,37 @@ CSVCache *csv_cache_get_or_load(GlobalCSVManager *manager, const char *csv_name)
 uint32_t csv_cache_lookup_loaded(const CSVCache *cache, const char *token);
 
 /**
+ * @brief Span-based lookup: hash and compare against parts[start..start+window-1] joined by '_'
+ * without materialising an intermediate string. Equivalent to lookup_loaded on the joined form.
+ * @param cache Loaded CSV cache
+ * @param parts Array of token part pointers
+ * @param start Index of first part in the span
+ * @param window Number of parts in the span
+ * @return Token ID if found, 0 if not found
+ */
+uint32_t csv_cache_lookup_span(const CSVCache *cache,
+                               char *const *parts,
+                               uint32_t start,
+                               uint32_t window);
+
+/**
+ * @brief Probe-only hot path: caller has already lowercased the token and computed its hash,
+ * length, and fingerprint. Skips the lowercase+hash pass inside the probe loop, reusing
+ * precomputed values across multiple cache calls on the same token.
+ * @param cache     Loaded CSV cache
+ * @param lower     Lowercase canonical form of the token (null-terminated)
+ * @param look_len  strlen(lower), pre-cached to avoid repeated strlen calls
+ * @param look_fp   Low 16 bits of djb2 hash (cheap pre-filter before strcmp)
+ * @param raw_hash  Full 32-bit djb2 hash (used for slot indexing)
+ * @return Token ID if found, 0 if not found
+ */
+uint32_t csv_cache_lookup_prehashed(const CSVCache *cache,
+                                    const char *lower,
+                                    uint16_t look_len,
+                                    uint16_t look_fp,
+                                    uint32_t raw_hash);
+
+/**
  * @brief Find which CSV file contains a specific token
  * @param manager CSV manager
  * @param token Token to locate
@@ -267,6 +304,15 @@ void csv_cache_report_summary(const GlobalCSVManager *manager);
  * @return Token ID if found, 0 if not found
  */
 uint32_t csv_direct_file_lookup(const char *csv_path, const char *token);
+
+/**
+ * @brief Print diagnostic counters for the CSV cache (profiling builds only)
+ * @param stream Output file stream
+ *
+ * Currently reports: csv_find_ci_calls (number of times the case-insensitive
+ * fallback fired). Should be zero after case canonicalisation is in place.
+ */
+void csv_cache_print_stats(FILE *stream);
 
 #endif /* TLV_FILENAME_CSV_CACHE_H */
 

@@ -24,6 +24,7 @@
 #pragma once
 
 #include <platform.h>
+#include <stdio.h>
 #include <tlv_filename/error_handling.h>
 #include <tlv_filename/field_registry.h>
 #include <tlv_filename/csv_cache.h>
@@ -203,6 +204,15 @@ void free_pack_types(PackType *pack_types, size_t pack_type_count);
  * @return Pointer to PackType if found, NULL if not found
  */
 const PackType *get_pack_type_by_id(const PackType *pack_types, size_t pack_type_count, uint8_t pack_id);
+
+/*------------------------------------------------------------------------*/
+/* Profiling Output */
+
+/**
+ * @brief Print per-field pack match hit counts (profiling builds only)
+ * @param stream Output stream to write to
+ */
+void filename_processor_print_pack_field_stats(FILE *stream);
 
 /*------------------------------------------------------------------------*/
 
