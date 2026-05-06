@@ -858,10 +858,10 @@ static bool span_equals_token(const char *token,
 uint32_t csv_cache_lookup_span(const CSVCache *cache,
                                char *const *parts,
                                uint32_t start,
-                               uint32_t window)
+                               uint32_t window,
+                               uint16_t cand_len)
 {
     uint32_t raw_hash;
-    uint16_t look_len;
     uint16_t look_fp;
     uint32_t index;
     uint32_t original_index;
@@ -875,9 +875,8 @@ uint32_t csv_cache_lookup_span(const CSVCache *cache,
 
     TLV_PROFILE_START(profile_stamp);
 
-    /* Compute djb2 hash and joined length directly from the span */
+    /* Compute djb2 hash directly from the span; length pre-screened by caller (Issue 1) */
     raw_hash = 5381;
-    look_len = 0;
     for (k = 0; k < window; k++) {
         p = parts[start + k];
         if (!p) {
@@ -886,25 +885,13 @@ uint32_t csv_cache_lookup_span(const CSVCache *cache,
         }
         if (k > 0) {
             raw_hash = ((raw_hash << 5) + raw_hash) + (uint32_t)'_';
-            look_len++;
         }
         while (*p) {
             unsigned char c  = (unsigned char)*p;
             unsigned char lc = (c >= 'A' && c <= 'Z') ? (unsigned char)(c + 32) : c;
             raw_hash = ((raw_hash << 5) + raw_hash) + (uint32_t)lc;
-            look_len++;
             p++;
         }
-    }
-    if (look_len >= CSV_MAX_TOKEN_LENGTH) {
-        TLV_PROFILE_END(TLV_PROFILE_SECTION_CSV_LOOKUP_LOADED, profile_stamp);
-        return 0;
-    }
-
-    /* Length triage: impossible match if span length is outside the cache's entry bounds */
-    if (look_len < cache->min_entry_len || look_len > cache->max_entry_len) {
-        TLV_PROFILE_END(TLV_PROFILE_SECTION_CSV_LOOKUP_LOADED, profile_stamp);
-        return 0;
     }
 
     look_fp = (uint16_t)(raw_hash & 0xFFFFU);
@@ -912,7 +899,7 @@ uint32_t csv_cache_lookup_span(const CSVCache *cache,
     original_index = index;
 
     while (cache->entries[index].token != NULL) {
-        if (cache->entries[index].len == look_len &&
+        if (cache->entries[index].len == cand_len &&
             cache->entries[index].fingerprint == look_fp &&
             span_equals_token(cache->entries[index].token, parts, start, window)) {
             uint32_t id = cache->entries[index].id;

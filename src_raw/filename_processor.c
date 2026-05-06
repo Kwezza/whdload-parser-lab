@@ -643,9 +643,13 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
         }
     }
 
+    /* Pre-compute once: avoids repeated strstr on every inner-loop iteration (Issue 2) */
+    int is_debug_filename = filename && (
+        strstr(filename, "Kernal_Version") != NULL ||
+        strstr(filename, "German_fix_by_Torti-the-Smurf") != NULL);
+
     /* Targeted debug: list prescan fields for known sample names */
-    if (filename && (strstr(filename, "Kernal_Version") != NULL ||
-                     strstr(filename, "German_fix_by_Torti-the-Smurf") != NULL)) {
+    if (is_debug_filename) {
     append_to_log("PRESCAN ACTIVE: %lu field(s)", (unsigned long)cfg_count);
         for (uint32_t dc = 0; dc < cfg_count; dc++) {
             append_to_log("  field=%s csv=%s order=%lu multi=%u remove=%u multival=%u",
@@ -664,6 +668,7 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
      * very end, only if at least one span was actually removed. */
     char tmp[MAX_FILENAME_LENGTH];
     char *parts[MAX_TOKENS];
+    uint16_t part_len[MAX_TOKENS];
     uint32_t pc = 0;
     bool any_span_removed = false;
     {
@@ -678,6 +683,13 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
         while (tok && pc < MAX_TOKENS) {
             parts[pc++] = tok;
             tok = whd_strtok_r(NULL, "_", &saveptr);
+        }
+    }
+    /* Pre-compute token lengths for span length pre-screening (Issue 1) */
+    {
+        uint32_t pk;
+        for (pk = 0; pk < pc; pk++) {
+            part_len[pk] = (uint16_t)strlen(parts[pk]);
         }
     }
 
@@ -702,29 +714,45 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
             removed_span = false;
             max_window = cfg->multi_token ? pc : 1U;
 
-            for (uint32_t window = max_window; window >= 1; window--) {
+            /* Issue 4: tighten window range to [wmin, wmax] so the loop never visits
+             * out-of-range window sizes at all, eliminating the per-iteration prune guard. */
+            {
+                uint32_t wmax, wmin;
+                if (cfg_caches[c] != NULL) {
+                    wmax = (pc > (uint32_t)cfg_caches[c]->max_token_count)
+                           ? (uint32_t)cfg_caches[c]->max_token_count : pc;
+                    wmin = (uint32_t)cfg_caches[c]->min_token_count;
+                    if (wmin < 1U) { wmin = 1U; }
+                } else {
+                    wmax = max_window;
+                    wmin = 1U;
+                }
+
+            for (uint32_t window = wmax; window >= wmin; window--) {
                 if (pc < window) {
                     continue;
                 }
 
-                /* Prune: skip window sizes outside this CSV's token-count range.
-                 * min_token_count/max_token_count are set at CSV load time and
-                 * reflect the actual range of underscore-separated part counts
-                 * across all entries. A window that is too wide or too narrow
-                 * can never match, so skip building the joined string entirely. */
-                if (cfg_caches[c] != NULL &&
-                    (window < (uint32_t)cfg_caches[c]->min_token_count ||
-                     window > (uint32_t)cfg_caches[c]->max_token_count)) {
-                    continue;
-                }
-
                 for (uint32_t i = 0; i + window <= pc; i++) {
+                /* Pre-screen by span length: O(window) additions replaces O(N) hash loop
+                 * for the ~73% of candidates rejected by the length gate (Issue 1). */
+                uint16_t cand_len = 0;
+                if (cfg_caches[c] != NULL) {
+                    uint32_t cl = window - 1U;
+                    uint32_t kk;
+                    for (kk = i; kk < i + window; kk++) { cl += (uint32_t)part_len[kk]; }
+                    if (cl < (uint32_t)cfg_caches[c]->min_entry_len ||
+                        cl > (uint32_t)cfg_caches[c]->max_entry_len) {
+                        continue;
+                    }
+                    cand_len = (uint16_t)cl;
+                }
                 /* Span-based lookup: hash and compare directly against parts[i..i+window-1]
                  * without materialising an intermediate joined string (Step 7). */
                 TLV_PROFILE_START(lookup_profile_stamp);
                 uint32_t id;
                 if (cfg_caches[c] != NULL) {
-                    id = csv_cache_lookup_span(cfg_caches[c], parts, i, window);
+                    id = csv_cache_lookup_span(cfg_caches[c], parts, i, window, cand_len);
                 } else {
                     /* Cold path: no pre-resolved cache — materialise and use slow lookup */
                     char joined[MAX_TOKEN_LENGTH];
@@ -738,8 +766,7 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
                 TLV_PROFILE_END(TLV_PROFILE_SECTION_PRESCAN_CSV_LOOKUP, lookup_profile_stamp);
 
                 /* Debug: materialise joined string only for known debug filenames */
-                if (filename && (strstr(filename, "Kernal_Version") != NULL ||
-                                 strstr(filename, "German_fix_by_Torti-the-Smurf") != NULL)) {
+                if (is_debug_filename) {
                     char dbg_joined[MAX_TOKEN_LENGTH];
                     build_joined_token(dbg_joined, sizeof(dbg_joined), parts, i, window);
                     append_to_log("PRESCAN TRY: field=%s csv=%s window=%lu token='%s' id=%lu",
@@ -757,8 +784,7 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
                                              (const uint8_t *)&id, sizeof(id));
                     }
                     /* Targeted, low-noise debug for known sample names */
-                    if (filename && (strstr(filename, "Kernal_Version") != NULL ||
-                                     strstr(filename, "German_fix_by_Torti-the-Smurf") != NULL)) {
+                    if (is_debug_filename) {
                         char dbg_joined[MAX_TOKEN_LENGTH];
                         build_joined_token(dbg_joined, sizeof(dbg_joined), parts, i, window);
                         append_to_log("PRESCAN MATCH: field=%s token='%s' id=%lu", cfg->field_name ? cfg->field_name : "?", dbg_joined, (unsigned long)id);
@@ -774,11 +800,17 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
 
                     if (cfg->remove_from_filename) {
                         compact_token_parts(parts, &pc, i, window);
+                        /* Mirror the compaction in part_len[] to keep lengths in sync (Issue 1) */
+                        {
+                            uint32_t pk;
+                            for (pk = i; pk < pc; pk++) {
+                                part_len[pk] = part_len[pk + window];
+                            }
+                        }
                         field_changed = true;
                         removed_span = true;
                         any_span_removed = true;
-                        if (filename && (strstr(filename, "Kernal_Version") != NULL ||
-                                         strstr(filename, "German_fix_by_Torti-the-Smurf") != NULL)) {
+                        if (is_debug_filename) {
                             char debug_rebuild[MAX_FILENAME_LENGTH];
                             rebuild_filename_from_parts(debug_rebuild, sizeof(debug_rebuild), parts, pc);
                             append_to_log("PRESCAN STRIP: field=%s result='%s'", cfg->field_name ? cfg->field_name : "?", debug_rebuild);
@@ -796,6 +828,7 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
                     break;
                 }
             }
+            } /* end wmax/wmin block (Issue 4) */
 
         } while (pc > 0 && cfg->remove_from_filename && field_changed);
         /* No per-field rebuild: the next field reads parts[] directly (Step 8). */

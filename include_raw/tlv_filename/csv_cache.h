@@ -177,7 +177,8 @@ uint32_t csv_cache_lookup_loaded(const CSVCache *cache, const char *token);
 uint32_t csv_cache_lookup_span(const CSVCache *cache,
                                char *const *parts,
                                uint32_t start,
-                               uint32_t window);
+                               uint32_t window,
+                               uint16_t cand_len);
 
 /**
  * @brief Probe-only hot path: caller has already lowercased the token and computed its hash,
