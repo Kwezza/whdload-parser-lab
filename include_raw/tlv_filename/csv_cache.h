@@ -56,6 +56,7 @@ typedef struct {
     uint8_t max_token_count;  /* Max underscore-token count across all entries (prescan prune) */
     uint16_t min_entry_len;   /* Shortest entry's strlen (length triage gate before probe) */
     uint16_t max_entry_len;   /* Longest entry's strlen (length triage gate before probe) */
+    uint32_t crc32;           /* CRC-32/ISO-HDLC of the raw CSV file bytes as loaded */
 } CSVCache;
 
 /**
@@ -314,6 +315,18 @@ uint32_t csv_direct_file_lookup(const char *csv_path, const char *token);
  * fallback fired). Should be zero after case canonicalisation is in place.
  */
 void csv_cache_print_stats(FILE *stream);
+
+/*------------------------------------------------------------------------*/
+/* CRC Fingerprint Access */
+
+/**
+ * @brief Retrieve the CRC-32 fingerprint for a loaded CSV cache.
+ * @param manager  CSV manager
+ * @param csv_name CSV base name (without .csv extension)
+ * @param out_crc  Receives the CRC-32 value if the cache is found
+ * @return true if the cache was found and out_crc was set, false otherwise
+ */
+bool csv_cache_get_crc(const GlobalCSVManager *manager, const char *csv_name, uint32_t *out_crc);
 
 #endif /* TLV_FILENAME_CSV_CACHE_H */
 

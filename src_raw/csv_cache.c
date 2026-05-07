@@ -16,6 +16,7 @@
 #include <tlv_filename/error_handling.h>
 #include <tlv_filename/tlv_profile.h>
 #include <io/writeLog.h>
+#include <utils/crc32.h>
 
 #include <string.h>
 #include <stdio.h>
@@ -346,8 +347,8 @@ static bool csv_parse_line(const char *line, uint32_t *id, char **name, char **l
         s++;
     }
 
-    /* Skip empty lines and comments */
-    if (s[0] == '\0' || s[0] == '#' || s[0] == '\n') {
+    /* Skip empty lines and comments (# and ; both treated as comment markers) */
+    if (s[0] == '\0' || s[0] == '#' || s[0] == ';' || s[0] == '\n') {
         return false;
     }
 
@@ -462,10 +463,13 @@ static bool csv_load_file_into_cache(CSVCache *cache, const char *csv_path) {
 
     char line[CSV_MAX_LINE_LENGTH];
     uint32_t entry_count = 0;
+    uint32_t crc_accum;
 
-    /* First pass: count entries */
+    /* First pass: count entries and compute CRC-32 over raw file bytes */
+    crc_accum = crc32_init();
     while (fgets(line, sizeof(line), file)) {
         uint32_t id; char *name; char *long_name = NULL; bool is_def=false;
+        crc_accum = crc32_update(crc_accum, (const unsigned char *)line, strlen(line));
         if (csv_parse_line(line, &id, &name, &long_name, &is_def)) {
             entry_count++;
 #if PLATFORM_HOST
@@ -475,6 +479,7 @@ static bool csv_load_file_into_cache(CSVCache *cache, const char *csv_path) {
             if (long_name) { whd_free(long_name); }
         }
     }
+    cache->crc32 = crc32_finalize(crc_accum);
 
 #if PLATFORM_HOST
     CSVDBG("DEBUG: First pass complete. Entry count: %u\n", entry_count);
@@ -1607,6 +1612,28 @@ void csv_cache_print_stats(FILE *stream)
 #else
     (void)stream;
 #endif
+}
+
+/*------------------------------------------------------------------------*/
+/* CRC Fingerprint Access */
+
+/**
+ * @brief Retrieve the CRC-32 fingerprint for a loaded CSV cache.
+ */
+bool csv_cache_get_crc(const GlobalCSVManager *manager, const char *csv_name, uint32_t *out_crc)
+{
+    uint32_t i;
+    if (!manager || !csv_name || !out_crc) {
+        return false;
+    }
+    for (i = 0; i < manager->cache_count; i++) {
+        if (manager->caches[i].csv_name &&
+            strcmp(manager->caches[i].csv_name, csv_name) == 0) {
+            *out_crc = manager->caches[i].crc32;
+            return true;
+        }
+    }
+    return false;
 }
 
 /* End of Text */

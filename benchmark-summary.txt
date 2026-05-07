@@ -161,3 +161,15 @@ TLV entries:  11634
 TLV build time: 97840 ms
 TLV save time: 7080 ms
 
+DAT input:    assets_raw/Games(19-05-2025).dat
+Output TLV:   output/Games(19-05-2025).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  3861
+Processed:    3861
+Successful:   3861
+Errors:       0
+TLV entries:  15495
+TLV build time: 1380 ms
+TLV save time: 120 ms
+

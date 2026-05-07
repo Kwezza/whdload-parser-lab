@@ -46,7 +46,8 @@ SRC := \
 	src/platform/platform_string.c \
 	src/io/writeLog.c \
 	src/io/pack_types_loader.c \
-	src/utils/prettify.c
+	src/utils/prettify.c \
+	src/utils/crc32.c
 
 OBJ := $(SRC:%.c=$(BUILD_DIR)/%.o)
 

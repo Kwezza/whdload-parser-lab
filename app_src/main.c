@@ -26,9 +26,24 @@ __declspec(dllimport) int __stdcall QueryPerformanceCounter(long long *counter);
 __declspec(dllimport) int __stdcall QueryPerformanceFrequency(long long *frequency);
 #endif
 
-#define DEFAULT_DAT_PATH        "assets_raw/Games(19-05-2025).dat"
-#define DEFAULT_OUTPUT_PATH     "output/Games(19-05-2025).tlv"
+#define DEFAULT_DAT_COUNT        5
 #define DEFAULT_CSV_DIR         "assets_raw/defs"
+
+static const char * const DEFAULT_DAT_PATHS[DEFAULT_DAT_COUNT] = {
+    "assets_raw/Dats/DemB(2026-04-20).dat",
+    "assets_raw/Dats/Demo(2026-03-23).dat",
+    "assets_raw/Dats/GamB(2026-04-26).dat",
+    "assets_raw/Dats/Game(2026-04-17).dat",
+    "assets_raw/Dats/Mags(2025-07-24).dat"
+};
+
+static const char * const DEFAULT_OUTPUT_PATHS[DEFAULT_DAT_COUNT] = {
+    "output/DemB(2026-04-20).tlv",
+    "output/Demo(2026-03-23).tlv",
+    "output/GamB(2026-04-26).tlv",
+    "output/Game(2026-04-17).tlv",
+    "output/Mags(2025-07-24).tlv"
+};
 #define DEFAULT_PACK_TYPES_PATH "assets_raw/prefs/pack_types.ini"
 #define DEFAULT_SUMMARY_LOG_FILE "benchmark-summary.txt"
 #define AMIGA_TICKS_PER_SECOND  50UL
@@ -503,14 +518,45 @@ static size_t find_pack_index_for_dat(const PackType *pack_types,
 }
 
 /**
+ * @brief Write a uint32 in big-endian (Motorola) byte order into dst[0..3].
+ */
+static void encode_u32_be(uint8_t *dst, uint32_t val)
+{
+    dst[0] = (uint8_t)((val >> 24) & 0xffu);
+    dst[1] = (uint8_t)((val >> 16) & 0xffu);
+    dst[2] = (uint8_t)((val >>  8) & 0xffu);
+    dst[3] = (uint8_t)( val        & 0xffu);
+}
+
+/**
+ * @brief Encode archive_info 8-byte payload: size_kib (BE) then crc32 (BE).
+ *
+ * size_kib = (size_bytes + 1023) / 1024   (rounded-up KiB, uint32)
+ * crc32    = raw CRC-32 value from the DAT crc= attribute
+ */
+static void encode_archive_info(uint8_t buf[8],
+                                uint32_t size_bytes,
+                                uint32_t crc32_val)
+{
+    uint32_t size_kib;
+    if (size_bytes == 0) {
+        size_kib = 0;
+    } else {
+        size_kib = (size_bytes + 1023u) / 1024u;
+    }
+    encode_u32_be(buf,     size_kib);
+    encode_u32_be(buf + 4, crc32_val);
+}
+
+/**
  * @brief Print usage for the standalone converter.
  */
 static void print_usage(const char *program_name)
 {
     printf("Usage: %s [--max-log] [--summary-log summary_path] [dat_path output_path [csv_dir pack_types_ini]]\n", program_name);
     printf("Defaults:\n");
-    printf("  dat_path       = %s\n", DEFAULT_DAT_PATH);
-    printf("  output_path    = %s\n", DEFAULT_OUTPUT_PATH);
+    printf("  dat_path       = (processes all %d default DAT files)\n", DEFAULT_DAT_COUNT);
+    printf("  output_path    = output/<DatName>(<date>).tlv\n");
     printf("  csv_dir        = %s\n", DEFAULT_CSV_DIR);
     printf("  pack_types_ini = %s\n", DEFAULT_PACK_TYPES_PATH);
     printf("  summary_log    = executable-folder/%s\n", DEFAULT_SUMMARY_LOG_FILE);
@@ -520,23 +566,25 @@ static void print_usage(const char *program_name)
 }
 
 /**
- * @brief Standalone host entry point for DAT-to-TLV conversion.
+ * @brief Process a single DAT file through the full TLV pipeline.
+ *
+ * Assumes tlv_session_init() has already been called. Handles all per-DAT
+ * allocations and cleanup internally.
+ *
+ * @return true on success, false on any error.
  */
-int main(int argc, char **argv)
+static bool process_dat_file(const char *dat_path,
+                             const char *output_path,
+                             const char *csv_dir,
+                             const char *pack_types_path,
+                             const PackType *pack_types,
+                             size_t pack_count,
+                             const char *summary_log_path,
+                             bool summary_log_is_default)
 {
-    const char *dat_path;
-    const char *output_path;
-    const char *csv_dir;
-    const char *pack_types_path;
-    const char *summary_log_path;
-    char default_summary_log_path[512];
-    char resolved_summary_log_path[512];
-    bool logging_requested;
-    bool summary_log_is_default;
-    char **filenames;
+    DatRomEntry *dat_entries;
+    const char **name_ptrs;
     size_t filename_count;
-    PackType *pack_types;
-    size_t pack_count;
     size_t pack_index;
     TLV_Record *records;
     TLV_Record aggregate;
@@ -550,122 +598,46 @@ int main(int argc, char **argv)
     unsigned long build_elapsed_ms;
     unsigned long save_elapsed_ms;
     bool success;
-    int positional_argc;
-    const char *positional_args[4];
-    int arg_index;
+    char resolved_summary_log_path[512];
+    size_t i;
     TLV_PROFILE_SCOPE(aggregate_merge_profile_stamp);
 
-    dat_path = DEFAULT_DAT_PATH;
-    output_path = DEFAULT_OUTPUT_PATH;
-    csv_dir = DEFAULT_CSV_DIR;
-    pack_types_path = DEFAULT_PACK_TYPES_PATH;
-    logging_requested = false;
-    filenames = NULL;
+    dat_entries = NULL;
+    name_ptrs = NULL;
     filename_count = 0;
-    pack_types = NULL;
-    pack_count = 0;
     records = NULL;
     field_registry = NULL;
     output_file = NULL;
     build_elapsed_ms = 0;
     save_elapsed_ms = 0;
-    build_default_summary_log_path(argv[0], default_summary_log_path, sizeof(default_summary_log_path));
-    summary_log_path = default_summary_log_path;
-    copy_path_string(resolved_summary_log_path, sizeof(resolved_summary_log_path), default_summary_log_path);
-    summary_log_is_default = true;
     success = false;
-    positional_argc = 0;
     memset(&aggregate, 0, sizeof(aggregate));
+    copy_path_string(resolved_summary_log_path, sizeof(resolved_summary_log_path), summary_log_path);
 
-    for (arg_index = 1; arg_index < argc; arg_index++) {
-        if (strcmp(argv[arg_index], "--max-log") == 0) {
-            logging_requested = true;
-            continue;
-        }
-
-        if (strcmp(argv[arg_index], "--summary-log") == 0) {
-            arg_index++;
-            if (arg_index >= argc) {
-                print_usage(argv[0]);
-                return 1;
-            }
-
-            summary_log_path = argv[arg_index];
-            summary_log_is_default = false;
-            continue;
-        }
-
-        if (strcmp(argv[arg_index], "--help") == 0 ||
-            strcmp(argv[arg_index], "-h") == 0) {
-            print_usage(argv[0]);
-            return 0;
-        }
-
-        if (positional_argc >= 4) {
-            print_usage(argv[0]);
-            return 1;
-        }
-
-        positional_args[positional_argc] = argv[arg_index];
-        positional_argc++;
-    }
-
-    if (positional_argc != 0 && positional_argc != 2 && positional_argc != 4) {
-        print_usage(argv[0]);
-        return 1;
-    }
-
-    if (positional_argc >= 2) {
-        dat_path = positional_args[0];
-        output_path = positional_args[1];
-    }
-    if (positional_argc == 4) {
-        csv_dir = positional_args[2];
-        pack_types_path = positional_args[3];
-    }
-
-    set_logging_enabled(logging_requested);
-    initialize_logfile();
-    tlv_profile_reset();
-    append_to_log("WARNING: set a high Amiga stack manually before running (example: STACK 100000) to avoid crashes");
     append_to_log("Standalone DAT-to-TLV run starting for '%s'", dat_path);
     append_to_log("Stage: parsing DAT filenames");
 #ifdef PLATFORM_AMIGA
     print_amiga_stage("parsing DAT filenames");
 #endif
 
-    filename_count = parse_dat_filenames_minimal(dat_path, &filenames);
-    if (filename_count == 0 || !filenames) {
+    filename_count = parse_dat_entries_minimal(dat_path, &dat_entries);
+    if (filename_count == 0 || !dat_entries) {
         append_to_log("ERROR: no DAT filenames extracted from '%s'", dat_path);
         fprintf(stderr, "No DAT filenames extracted from %s\n", dat_path);
         goto cleanup;
     }
     append_to_log("Stage complete: parsed %lu DAT filenames", (unsigned long)filename_count);
 
-    append_to_log("Stage: loading pack types");
-#ifdef PLATFORM_AMIGA
-    print_amiga_stage("loading pack types");
-#endif
-    pack_types = load_pack_types(pack_types_path, &pack_count);
-    if (!pack_types || pack_count == 0) {
-        append_to_log("ERROR: failed to load pack types from '%s'", pack_types_path);
-        fprintf(stderr, "Failed to load pack types from %s\n", pack_types_path);
+    name_ptrs = (const char **)whd_malloc(filename_count * sizeof(const char *));
+    if (!name_ptrs) {
+        fprintf(stderr, "Failed to allocate name pointer array\n");
         goto cleanup;
     }
-    append_to_log("Stage complete: loaded %lu pack types", (unsigned long)pack_count);
+    for (i = 0; i < filename_count; i++) {
+        name_ptrs[i] = dat_entries[i].name;
+    }
 
     pack_index = find_pack_index_for_dat(pack_types, pack_count, dat_path);
-
-    append_to_log("Stage: initializing TLV session");
-#ifdef PLATFORM_AMIGA
-    print_amiga_stage("initializing TLV session");
-#endif
-    if (!tlv_session_init(csv_dir, pack_types_path)) {
-        append_to_log("ERROR: failed to initialize TLV session");
-        fprintf(stderr, "Failed to initialize TLV session\n");
-        goto cleanup;
-    }
-    append_to_log("Stage complete: TLV session initialized");
 
     records = (TLV_Record *)whd_malloc(filename_count * sizeof(TLV_Record));
     if (!records) {
@@ -678,13 +650,48 @@ int main(int argc, char **argv)
 #ifdef PLATFORM_AMIGA
     print_amiga_stage("processing filename batch");
 #endif
-    if (!tlv_session_process_batch((const char **)filenames,
+    if (!tlv_session_process_batch(name_ptrs,
                                    (uint32_t)filename_count,
                                    (uint32_t)pack_index,
                                    records,
                                    &summary)) {
         fprintf(stderr, "Failed to process DAT batch\n");
         goto cleanup;
+    }
+
+#ifdef PLATFORM_AMIGA
+    print_amiga_stage("injecting archive info");
+#endif
+
+    /* Build registry now so we can resolve the archive_info field ID for injection */
+    field_registry = field_registry_alloc();
+    if (!field_registry || !build_field_registry_from_ini(field_registry, pack_types_path)) {
+        fprintf(stderr, "Failed to rebuild field registry for output\n");
+        goto cleanup;
+    }
+
+    /* Inject archive_info (size_kib + crc32, big-endian) into each per-file record */
+    {
+        uint8_t archive_info_id;
+        uint8_t buf[8];
+
+        archive_info_id = field_registry_get_id(field_registry, "archive_info");
+        if (archive_info_id != 0) {
+            for (i = 0; i < filename_count; i++) {
+                if (records[i].entry_count == 0) {
+                    continue;
+                }
+                encode_archive_info(buf,
+                                    dat_entries[i].size_bytes,
+                                    dat_entries[i].crc32);
+                if (!tlv_record_add_entry(&records[i], archive_info_id, buf, 8)) {
+                    fprintf(stderr, "WARNING: failed to add archive_info for record %lu\n",
+                            (unsigned long)i);
+                }
+            }
+        } else {
+            fprintf(stderr, "WARNING: archive_info field not found in registry\n");
+        }
     }
 
 #ifdef PLATFORM_AMIGA
@@ -696,7 +703,6 @@ int main(int argc, char **argv)
     }
 
     {
-        size_t i;
         TLV_PROFILE_START(aggregate_merge_profile_stamp);
         for (i = 0; i < filename_count; i++) {
             if (records[i].entry_count == 0) {
@@ -714,12 +720,6 @@ int main(int argc, char **argv)
 
     if (aggregate.entry_count == 0) {
         fprintf(stderr, "No TLV entries were generated\n");
-        goto cleanup;
-    }
-
-    field_registry = field_registry_alloc();
-    if (!field_registry || !build_field_registry_from_ini(field_registry, pack_types_path)) {
-        fprintf(stderr, "Failed to rebuild field registry for output\n");
         goto cleanup;
     }
 
@@ -805,14 +805,162 @@ cleanup:
     if (records) {
         free_record_array(records, filename_count);
     }
+    if (name_ptrs) {
+        whd_free(name_ptrs);
+    }
+    if (dat_entries) {
+        free_dat_entries_minimal(dat_entries, filename_count);
+    }
+    return success;
+}
+
+/**
+ * @brief Standalone host entry point for DAT-to-TLV conversion.
+ */
+int main(int argc, char **argv)
+{
+    const char *dat_path;
+    const char *output_path;
+    const char *csv_dir;
+    const char *pack_types_path;
+    const char *summary_log_path;
+    char default_summary_log_path[512];
+    bool logging_requested;
+    bool summary_log_is_default;
+    PackType *pack_types;
+    size_t pack_count;
+    bool all_success;
+    int positional_argc;
+    const char *positional_args[4];
+    int arg_index;
+    int dat_index;
+
+    dat_path = NULL;
+    output_path = NULL;
+    csv_dir = DEFAULT_CSV_DIR;
+    pack_types_path = DEFAULT_PACK_TYPES_PATH;
+    logging_requested = false;
+    pack_types = NULL;
+    pack_count = 0;
+    all_success = false;
+    summary_log_is_default = true;
+    positional_argc = 0;
+    build_default_summary_log_path(argv[0], default_summary_log_path, sizeof(default_summary_log_path));
+    summary_log_path = default_summary_log_path;
+
+    for (arg_index = 1; arg_index < argc; arg_index++) {
+        if (strcmp(argv[arg_index], "--max-log") == 0) {
+            logging_requested = true;
+            continue;
+        }
+
+        if (strcmp(argv[arg_index], "--summary-log") == 0) {
+            arg_index++;
+            if (arg_index >= argc) {
+                print_usage(argv[0]);
+                return 1;
+            }
+
+            summary_log_path = argv[arg_index];
+            summary_log_is_default = false;
+            continue;
+        }
+
+        if (strcmp(argv[arg_index], "--help") == 0 ||
+            strcmp(argv[arg_index], "-h") == 0) {
+            print_usage(argv[0]);
+            return 0;
+        }
+
+        if (positional_argc >= 4) {
+            print_usage(argv[0]);
+            return 1;
+        }
+
+        positional_args[positional_argc] = argv[arg_index];
+        positional_argc++;
+    }
+
+    if (positional_argc != 0 && positional_argc != 2 && positional_argc != 4) {
+        print_usage(argv[0]);
+        return 1;
+    }
+
+    if (positional_argc >= 2) {
+        dat_path = positional_args[0];
+        output_path = positional_args[1];
+    }
+    if (positional_argc == 4) {
+        csv_dir = positional_args[2];
+        pack_types_path = positional_args[3];
+    }
+
+    set_logging_enabled(logging_requested);
+    initialize_logfile();
+    tlv_profile_reset();
+    append_to_log("WARNING: set a high Amiga stack manually before running (example: STACK 100000) to avoid crashes");
+
+    append_to_log("Stage: loading pack types");
+#ifdef PLATFORM_AMIGA
+    print_amiga_stage("loading pack types");
+#endif
+    pack_types = load_pack_types(pack_types_path, &pack_count);
+    if (!pack_types || pack_count == 0) {
+        append_to_log("ERROR: failed to load pack types from '%s'", pack_types_path);
+        fprintf(stderr, "Failed to load pack types from %s\n", pack_types_path);
+        goto cleanup;
+    }
+    append_to_log("Stage complete: loaded %lu pack types", (unsigned long)pack_count);
+
+    append_to_log("Stage: initializing TLV session");
+#ifdef PLATFORM_AMIGA
+    print_amiga_stage("initializing TLV session");
+#endif
+    if (!tlv_session_init(csv_dir, pack_types_path)) {
+        append_to_log("ERROR: failed to initialize TLV session");
+        fprintf(stderr, "Failed to initialize TLV session\n");
+        goto cleanup;
+    }
+    append_to_log("Stage complete: TLV session initialized");
+
+    all_success = true;
+    if (positional_argc >= 2) {
+        if (!process_dat_file(dat_path,
+                              output_path,
+                              csv_dir,
+                              pack_types_path,
+                              pack_types,
+                              pack_count,
+                              summary_log_path,
+                              summary_log_is_default)) {
+            all_success = false;
+        }
+    } else {
+        for (dat_index = 0; dat_index < DEFAULT_DAT_COUNT; dat_index++) {
+            printf("\n--- Processing %s ---\n", DEFAULT_DAT_PATHS[dat_index]);
+            if (!process_dat_file(DEFAULT_DAT_PATHS[dat_index],
+                                  DEFAULT_OUTPUT_PATHS[dat_index],
+                                  csv_dir,
+                                  pack_types_path,
+                                  pack_types,
+                                  pack_count,
+                                  summary_log_path,
+                                  summary_log_is_default)) {
+                fprintf(stderr, "Failed: %s\n", DEFAULT_DAT_PATHS[dat_index]);
+                all_success = false;
+            }
+        }
+    }
+
+cleanup:
+#ifdef PLATFORM_AMIGA
+    print_amiga_stage(all_success ? "final cleanup" : "cleanup after failure");
+#endif
     tlv_session_finalize();
     if (pack_types) {
         free_pack_types(pack_types, pack_count);
     }
-    if (filenames) {
-        free_dat_filenames_minimal(filenames, filename_count);
-    }
     prettify_shutdown();
 
-    return success ? 0 : 1;
+    return all_success ? 0 : 1;
 }

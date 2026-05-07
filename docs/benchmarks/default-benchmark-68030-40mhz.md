@@ -499,6 +499,76 @@ The 68000 comparison benchmark supports the same ordering. It also adds one impo
 - use profiled runs to rank hotspots
 - use non-profiled runs to judge real user-facing throughput
 
+---
+
+## 68040 @ 40MHz — Original Code vs Optimised 68030 @ 40MHz
+
+`benchmark-summary-68040_at_40mhz.txt` records the original unoptimised pipeline run on a
+68040 @ 40MHz with `PROFILE=1`. This predates the refactoring work and all hotspot fixes.
+
+The latest optimised result is Run 3 from `benchmark-summary.txt` (Issues 1+2+4 applied,
+`PROFILE=1`, 68030 @ 40MHz). Run 4 (`PROFILE=0`, same 68030) gives the true wall-clock time.
+
+Note: the 68040 pipeline is wider than the 68030 and slightly faster per clock for integer
+work, so this comparison modestly understates the algorithmic improvement.
+
+### Original 68040 profiled run (pre-refactoring)
+
+```text
+TLV build time: 196960 ms
+TLV save time:  1700 ms
+
+batch_total        calls=1      total=190600  ms share=100.0%
+prescan            calls=3861   total=125020  ms share= 65.5%
+prescan_join       calls=48086  total=12900   ms share=  6.7%
+prescan_lookup     calls=48086  total=70760   ms share= 37.1%
+prescan_rebuild    calls=137    total=100     ms share=  0.0%
+token_loop         calls=3861   total=47520   ms share= 24.9%
+pack_field_match   calls=918    total=31920   ms share= 16.7%
+csv_lookup         calls=60758  total=62960   ms share= 33.0%
+tlv_add_entry      calls=23268  total=5920    ms share=  3.1%
+aggregate_merge    calls=1      total=6360    ms share=  3.3%
+```
+
+### Comparison table — profiled runs (same instrumentation overhead)
+
+| Metric | Original 68040 (PROFILE=1) | Optimised 68030 Run 3 (PROFILE=1) | Delta |
+|---|---|---|---|
+| TLV build time | 196960 ms | **87580 ms** | **−109380 ms (−55.5%)** |
+| `batch_total` | 190600 ms | **80440 ms** | **−110160 ms (−57.8%)** |
+| `prescan` | 125020 ms | 45380 ms | **−79640 ms (−63.7%)** |
+| `prescan_lookup` | 70760 ms | 29820 ms | **−40940 ms (−57.8%)** |
+| `prescan_lookup` calls | 48086 | 38267 | **−9819 (−20.4%)** |
+| `prescan_join` | 12900 ms | — | eliminated |
+| `token_loop` | 47520 ms | 13360 ms | **−34160 ms (−71.9%)** |
+| `pack_field_match` | 31920 ms | 2660 ms | **−29260 ms (−91.7%)** |
+| `csv_lookup` (slow path) | 62960 ms | — | eliminated |
+| `csv_lookup_loaded` | n/a | 12240 ms | new metric |
+| `aggregate_merge` | 6360 ms | 6660 ms | stable |
+| `tlv_add_entry` | 5920 ms | 5980 ms | stable |
+
+### True wall-clock (PROFILE=0, no instrumentation overhead)
+
+| | |
+|---|---|
+| Optimised 68030 @ 40MHz, Run 4 | **20220 ms** |
+| Optimised 68000 @ 7MHz, Run 5 | **97840 ms** |
+
+The 20220 ms is not directly comparable to the 190600 ms (different profiling state), but
+illustrates the combined effect. A PROFILE=0 run of the original 68040 code would likely
+be in the 40–60 second range based on the ~3–4× profiling overhead ratio seen in other runs.
+
+### What drove the improvement
+
+| Optimisation | Primary effect |
+|---|---|
+| Shared `parts[]` / prescan restructure | Eliminated `prescan_join` (12900 ms) |
+| Hash table for CSV lookups | Eliminated slow-path `csv_lookup` (62960 ms) |
+| `pack_field_match` prehash + field sort + min/max gate | −91.7% on `pack_field_match` |
+| Issue 2: pre-compute `is_debug_filename` | Eliminated ~87600 inner-loop `strstr` calls |
+| Issue 1: part-length pre-screen | −20.4% fewer lookup calls |
+| Issue 4: window loop range tightening | −4.6% on `prescan_lookup` time |
+
 ## Current Working Interpretation
 
 The current profile suggests that the code is spending most of its time repeatedly asking questions like:

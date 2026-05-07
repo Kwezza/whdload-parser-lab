@@ -26,6 +26,7 @@
 
 #include <platform.h>
 #include <tlv_filename/field_registry.h>
+#include <tlv_filename/csv_cache.h>
 
 /*------------------------------------------------------------------------*/
 /* Metadata Map Types */
@@ -121,13 +122,60 @@ bool metadata_maps_compatible(const EmbeddedMetadataMap *map1, const EmbeddedMet
 /* Reserved TLV Types */
 
 /* Reserved TLV type for embedded metadata map */
-#define TLV_TYPE_METADATA_MAP    0x01
+#define TLV_TYPE_METADATA_MAP       0x01
+
+/* Reserved TLV type for CSV fingerprint record */
+#define TLV_TYPE_CSV_FINGERPRINTS   0x04
 
 /* Standard TLV data types */
 #define TLV_TYPE_INTEGER         0x02
 #define TLV_TYPE_STRING          0x03
 
 /*------------------------------------------------------------------------*/
+/* CSV Fingerprint Types */
+
+/**
+ * @brief CRC-32 fingerprint for a single CSV file.
+ */
+typedef struct {
+    char     csv_name[64]; /* Base name of the CSV (without .csv extension) */
+    uint32_t crc32;        /* CRC-32/ISO-HDLC of the file bytes as loaded */
+} CSVFingerprint;
+
+/**
+ * @brief Collection of CSV fingerprints embedded in a TLV file (type 0x04).
+ */
+typedef struct {
+    uint16_t       count;   /* Number of fingerprint entries */
+    CSVFingerprint *entries;/* Array of count entries */
+} CSVFingerprintMap;
+
+/*------------------------------------------------------------------------*/
+/* CSV Fingerprint API */
+
+/**
+ * @brief Write a type 0x04 CSV fingerprint record to a TLV file.
+ * Iterates all loaded caches in the manager and writes one entry per cache.
+ * @param tlv_file Output TLV file handle (must be open for writing)
+ * @param manager  CSV cache manager holding the loaded caches and their CRCs
+ * @return true if successful, false on error
+ */
+bool tlv_write_csv_fingerprints(FILE *tlv_file, const GlobalCSVManager *manager);
+
+/**
+ * @brief Read and deserialise a type 0x04 CSV fingerprint record from a TLV file.
+ * The file position must be immediately after the 0x04 type byte.
+ * @param tlv_file Input TLV file handle
+ * @param out_map  Receives the deserialised map (caller must call free_csv_fingerprint_map)
+ * @return true if successful, false on error
+ */
+bool tlv_read_csv_fingerprints(FILE *tlv_file, CSVFingerprintMap *out_map);
+
+/**
+ * @brief Free a CSVFingerprintMap allocated by tlv_read_csv_fingerprints.
+ * @param map Map to free (may be NULL)
+ */
+void free_csv_fingerprint_map(CSVFingerprintMap *map);
 
 #endif /* TLV_FILENAME_EMBEDDED_METADATA_H */
 

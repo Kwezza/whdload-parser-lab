@@ -670,3 +670,70 @@ chip-RAM-sensitive bottleneck beyond the raw CPU speed disadvantage.
 This also sets a concrete target: any further algorithmic improvement that reduces
 instructions executed will benefit the 68000 proportionally more than the profiling
 runs suggested.
+
+---
+
+## Final Comparison — Original 68040 @ 40MHz vs Optimised 68030 @ 40MHz
+
+The original unoptimised code was run on a 68040 @ 40MHz with `PROFILE=1` and is recorded
+in `benchmark-summary-68040_at_40mhz.txt`. This is the starting point before any of the
+refactoring or hotspot work described in this document.
+
+The latest optimised run (Issues 1+2+4 applied, `PROFILE=1`) is Run 3 from
+`benchmark-summary.txt`, measured on the 68030 @ 40MHz.
+
+The uninstrumented optimised run (Run 4, `PROFILE=0`) is also included for reference —
+it is the real user-facing wall-clock time with no profiling overhead.
+
+Note: the 68040 has a wider pipeline and faster FPU than the 68030, but both run at 40MHz
+in this WinUAE configuration. For pure integer / string work the 68040 is modestly faster
+per clock, so the comparison slightly understates the algorithmic improvement.
+
+### Profiled run comparison (apples-to-apples: same profiling overhead structure)
+
+| Metric | Original 68040 @ 40MHz | Optimised 68030 @ 40MHz | Delta |
+|---|---|---|---|
+| `batch_total` | 190600 ms | **80440 ms** | **−110160 ms (−57.8%)** |
+| `prescan` | 125020 ms | 45380 ms | **−79640 ms (−63.7%)** |
+| `prescan_lookup` | 70760 ms | 29820 ms | **−40940 ms (−57.8%)** |
+| `prescan_lookup` calls | 48086 | 38267 | **−9819 (−20.4%)** |
+| `prescan_join` | 12900 ms | — | eliminated |
+| `token_loop` | 47520 ms | 13360 ms | **−34160 ms (−71.9%)** |
+| `pack_field_match` | 31920 ms | 2660 ms | **−29260 ms (−91.7%)** |
+| `csv_lookup` (slow path) | 62960 ms | — | eliminated |
+| `csv_lookup_loaded` | n/a | 12240 ms | new metric |
+| `aggregate_merge` | 6360 ms | 6660 ms | stable |
+| `tlv_add_entry` | 5920 ms | 5980 ms | stable |
+
+### True wall-clock comparison (PROFILE=0, no instrumentation overhead)
+
+| Machine | Build time (no profiling) | vs original 68040 profiled |
+|---|---|---|
+| Original 68040 @ 40MHz | not measured (no PROFILE=0 run) | — |
+| Optimised 68030 @ 40MHz | **20220 ms** | **−89.4%** |
+
+The 20220 ms figure is not strictly comparable to the 190600 ms (one has profiling, the
+other does not), but it illustrates the combined magnitude of the algorithmic improvements
+and instrumentation removal. A PROFILE=0 run of the original code would likely be in the
+40–60 second range based on the ~3–4× profiling overhead seen in other runs.
+
+### What drove the improvement
+
+| Optimisation | Primary effect |
+|---|---|
+| Shared `parts[]` / prescan restructure (earlier refactoring) | Eliminated `prescan_join` (12900 ms) |
+| Hash table for CSV lookups (`csv_lookup_loaded`) | Eliminated slow-path `csv_lookup` (62960 ms) |
+| `pack_field_match` prehash + field sort + min/max gate | −91.7% on `pack_field_match` (31920 → 2660 ms) |
+| Issue 2: pre-compute `is_debug_filename` | Eliminated ~87600 inner-loop `strstr` calls |
+| Issue 1: part-length pre-screen | −12.6% fewer lookup calls (48086 → 38267) |
+| Issue 4: window loop range tightening | −4.6% on `prescan_lookup` time |
+
+The most impactful single change was replacing the linear-scan `csv_lookup` (publisher.csv
+open + string scan per token) with the hash table `csv_lookup_loaded` path — that alone
+accounts for the bulk of the 62960 ms → 0 ms drop in the slow lookup bucket.
+
+The second most impactful was the `pack_field_match` prehash + early-exit patches, cutting
+a 31920 ms hotspot to 2660 ms.
+
+The Issues 1+2+4 hotspot work in this document contributed a further ~10 seconds of
+profiled-run improvement on top of the already-refactored baseline.

@@ -17,6 +17,7 @@
 #include <tlv_filename/tlv_profile.h>
 #include <tlv_filename/filename_processor.h>
 #include <tlv_filename/csv_cache.h>
+#include <tlv_filename/embedded_metadata.h>
 #include <io/pack_types_loader.h>
 #include <io/writeLog.h>
 #include <string.h>
@@ -127,7 +128,8 @@ static bool pack_field_uses_generic_csv_match(const char *field_name)
     if (strcmp(field_name, "version") == 0 ||
         strcmp(field_name, "language") == 0 ||
         strcmp(field_name, "sps") == 0 ||
-        strcmp(field_name, "contributors") == 0) {
+        strcmp(field_name, "contributors") == 0 ||
+        strcmp(field_name, "archive_info") == 0) {
         return false;
     }
 
@@ -491,6 +493,152 @@ bool tlv_write_metadata_map(FILE *file, const FieldRegistry *field_registry) {
 }
 
 /**
+ * @brief Write a type 0x04 CSV fingerprint record to a TLV file.
+ *
+ * Wire format:
+ *   [1 byte : type = 0x04]
+ *   [2 bytes: payload size, little-endian]
+ *   [2 bytes: entry count, little-endian]
+ *   per entry:
+ *     [N bytes: null-terminated csv_name]
+ *     [4 bytes: crc32, little-endian]
+ */
+bool tlv_write_csv_fingerprints(FILE *file, const GlobalCSVManager *manager)
+{
+    uint32_t i;
+    uint16_t payload_size;
+    uint16_t count;
+    uint8_t  rec_type;
+
+    if (!file || !manager) {
+        return false;
+    }
+
+    /* Only write if there are loaded caches */
+    if (manager->cache_count == 0) {
+        return true;
+    }
+
+    /* Calculate payload: 2 bytes count + per-entry (strlen(csv_name)+1 + 4) */
+    payload_size = 2; /* count field */
+    for (i = 0; i < manager->cache_count; i++) {
+        const char *name = manager->caches[i].csv_name;
+        if (!name) {
+            continue;
+        }
+        payload_size += (uint16_t)(strlen(name) + 1 + 4);
+    }
+
+    /* Write type byte */
+    rec_type = TLV_TYPE_CSV_FINGERPRINTS;
+    if (fwrite(&rec_type, 1, 1, file) != 1) {
+        return false;
+    }
+
+    /* Write 2-byte payload size */
+    if (fwrite(&payload_size, 2, 1, file) != 1) {
+        return false;
+    }
+
+    /* Write 2-byte entry count */
+    count = (uint16_t)manager->cache_count;
+    if (fwrite(&count, 2, 1, file) != 1) {
+        return false;
+    }
+
+    /* Write each entry: null-terminated name + 4-byte CRC */
+    for (i = 0; i < manager->cache_count; i++) {
+        const char *name = manager->caches[i].csv_name;
+        uint32_t   crc   = manager->caches[i].crc32;
+        size_t     nlen;
+
+        if (!name) {
+            continue;
+        }
+
+        nlen = strlen(name) + 1; /* include null terminator */
+        if (fwrite(name, 1, nlen, file) != nlen) {
+            return false;
+        }
+        if (fwrite(&crc, 4, 1, file) != 1) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * @brief Read and deserialise a type 0x04 CSV fingerprint record.
+ * The file position must be immediately after the type byte.
+ */
+bool tlv_read_csv_fingerprints(FILE *file, CSVFingerprintMap *out_map)
+{
+    uint16_t payload_size;
+    uint16_t count;
+    uint16_t i;
+
+    if (!file || !out_map) {
+        return false;
+    }
+
+    out_map->count   = 0;
+    out_map->entries = NULL;
+
+    if (fread(&payload_size, 2, 1, file) != 1) {
+        return false;
+    }
+    if (fread(&count, 2, 1, file) != 1) {
+        return false;
+    }
+
+    if (count == 0) {
+        return true; /* empty but valid */
+    }
+
+    out_map->entries = (CSVFingerprint *)whd_malloc(count * sizeof(CSVFingerprint));
+    if (!out_map->entries) {
+        return false;
+    }
+    memset(out_map->entries, 0, count * sizeof(CSVFingerprint));
+
+    for (i = 0; i < count; i++) {
+        /* Read null-terminated csv_name */
+        size_t pos = 0;
+        int    ch;
+        while ((ch = fgetc(file)) != EOF && ch != '\0' && pos < sizeof(out_map->entries[i].csv_name) - 1) {
+            out_map->entries[i].csv_name[pos++] = (char)ch;
+        }
+        out_map->entries[i].csv_name[pos] = '\0';
+
+        /* Read 4-byte CRC */
+        if (fread(&out_map->entries[i].crc32, 4, 1, file) != 1) {
+            whd_free(out_map->entries);
+            out_map->entries = NULL;
+            return false;
+        }
+    }
+
+    out_map->count = count;
+    return true;
+}
+
+/**
+ * @brief Free a CSVFingerprintMap allocated by tlv_read_csv_fingerprints.
+ */
+void free_csv_fingerprint_map(CSVFingerprintMap *map)
+{
+    if (!map) {
+        return;
+    }
+    if (map->entries) {
+        whd_free(map->entries);
+        map->entries = NULL;
+    }
+    map->count = 0;
+}
+
+/**
  * @brief Write TLV record to file with embedded metadata map
  */
 bool tlv_write_record_with_metadata(FILE *file,
@@ -503,6 +651,10 @@ bool tlv_write_record_with_metadata(FILE *file,
     /* Write metadata map first if field registry provided */
     if (field_registry) {
         if (!tlv_write_metadata_map(file, field_registry)) {
+            return false;
+        }
+        /* Write CSV fingerprint record immediately after the field map */
+        if (!tlv_write_csv_fingerprints(file, &session_csv_manager)) {
             return false;
         }
     }

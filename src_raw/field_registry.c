@@ -69,6 +69,8 @@ static void set_csv_base_for_field(FieldDefinition *field, const char *field_nam
         base = ""; /* No CSV for SPS numbers */
     } else if (strcmp(field_name, "display_name") == 0) {
         base = ""; /* Internal display string, not CSV backed */
+    } else if (strcmp(field_name, "archive_info") == 0) {
+        base = ""; /* DAT transport field, no CSV backing */
     }
 
     /* Store base name without extension; csv_cache will append .csv */
