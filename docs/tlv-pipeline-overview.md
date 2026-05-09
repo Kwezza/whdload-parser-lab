@@ -98,9 +98,18 @@ The individual records produced for each filename are assembled into a single TL
 entry in the TLV holds a field identifier, a length, and the value — either a numeric token ID or
 a short string depending on the field type.
 
-After the per-filename metadata records are built, a single `archive_info` entry is appended to
-each record. This field carries two archive-level facts sourced directly from the DAT `<rom />`
-attributes rather than from filename parsing:
+After the per-filename metadata records are built, two additional fields are injected into each
+record:
+
+**`group_id`** (field ID 0x05) — a uint16, big-endian, assigned by the builder to every variant
+that shares the same logical game title. All variants of *1869* get the same group_id; all
+variants of *Zynaps* get a different one. The builder derives the canonical group name by scanning
+the display name for the `_v<digit>` pattern (e.g. `1869_v1.2_De` → `1869`) and assigns
+numeric IDs sequentially starting at 1. A group_id value of 0 is a sentinel meaning absent.
+This field does not participate in CSV token matching or variant ranking.
+
+**`archive_info`** — a single field carrying two archive-level facts sourced from the DAT
+`<rom />` attributes:
 
 | Sub-field | Offset | Size | Encoding | Description |
 |---|---|---|---|---|
@@ -112,19 +121,29 @@ them directly without byte-swapping. For example, an archive reported as 679,540
 CRC `4af2c824` produces the 8-byte payload `00 00 02 98 4A F2 C8 24`.
 
 The `archive_info` field is registered in the field registry like any other dynamic field, so it
-appears in the metadata map and can be located by name. It does not participate in CSV token
-matching or variant ranking.
+appears in the field map and can be located by name. It does not participate in CSV token matching
+or variant ranking.
 
-A metadata map is prepended to the TLV file. This map records the field names and their
-corresponding numeric identifiers so that the Amiga reader does not need to have the field names
-baked in at compile time. The reader simply consults the map at startup and then navigates the
-data by ID.
+Three header blocks are prepended to the TLV file:
 
-Immediately after the field map, a second header record embeds the CRC-32 fingerprint of every
-CSV file that contributed data to this build. Each fingerprint entry names the CSV and stores its
-checksum. Together these two header records make the TLV file entirely self-describing: a reader
-or validator can determine both what fields are present and whether the lookup tables that
-produced them have since changed.
+**Block 0x01 — Field map.** Records field names and their numeric identifiers so that the Amiga
+reader does not need the field names baked in at compile time. The reader consults the map at
+startup and navigates the data by ID. The two implicit fields always occupy the first two slots:
+`display_name` = 0x04 (the record boundary marker) and `group_id` = 0x05. Pack-type fields begin
+at 0x06.
+
+**Block 0x02 — Group map.** Written immediately after the field map. Stores a compact table that
+maps each numeric group_id to its canonical group name (the game title). Wire format:
+`[1 byte 0x02][2 bytes LE payload_size][2 bytes LE group_count]` then per entry:
+`[2 bytes BE group_id][1 byte name_len][name_len bytes group_name (no NUL)]`. The runtime reads
+this block and uses it for grouping without touching the variant records. Old TLVs without block
+0x02 are handled gracefully: the runtime falls back to heuristic group derivation on the
+display_name field.
+
+**Block 0x04 — CSV fingerprints.** Embeds the CRC-32 checksum of every CSV file used during the
+build. Each entry names the CSV and stores its checksum. Together the three header blocks make the
+TLV file entirely self-describing: a reader can determine what fields are present, how variants
+are grouped, and whether the lookup tables have since changed.
 
 ---
 
@@ -156,6 +175,12 @@ size and makes lookups on the Amiga trivially fast.
 happen on the host PC. The Amiga receives a pre-processed binary and does no parsing at runtime.
 
 **Source data is fingerprinted.** Every CSV lookup table used during a build has its CRC-32
-checksum stored inside the TLV output. If a CSV is later edited — a new publisher added, a
-language code corrected — the checksum in any existing TLV will no longer match. A host-side
-validator can detect the mismatch and prompt a rebuild before a stale index reaches the Amiga.
+checksum stored inside the TLV output (block 0x04). If a CSV is later edited — a new publisher
+added, a language code corrected — the checksum in any existing TLV will no longer match. A
+host-side validator can detect the mismatch and prompt a rebuild before a stale index reaches the
+Amiga.
+
+**Variants are pre-grouped.** The builder assigns a numeric `group_id` to every variant and
+stores a group_id → group_name map in TLV header block 0x02. The runtime reads this map once at
+load time and can group variants by integer comparison rather than by string parsing. Old TLVs
+without block 0x02 remain readable; the runtime falls back to heuristic display_name splitting.

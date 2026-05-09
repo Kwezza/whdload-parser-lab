@@ -63,9 +63,9 @@ typedef struct {
 /* Reserved TLV Types */
 
 /* Reserved TLV types for system use */
-#define TLV_TYPE_METADATA_MAP    0x01   /* Embedded metadata map */
-#define TLV_TYPE_RECORD_COUNT    0x02   /* Number of records in file */
-#define TLV_TYPE_FILE_VERSION    0x03   /* TLV file format version */
+#define TLV_TYPE_METADATA_MAP    0x01   /* Embedded metadata map            */
+#define TLV_TYPE_GROUP_MAP       0x02   /* Group-id -> group-name header map */
+#define TLV_TYPE_FILE_VERSION    0x03   /* TLV file format version           */
 /* Current TLV file format version (increment on incompatible changes) */
 #define TLV_FILE_VERSION         0x0001
 
@@ -207,6 +207,45 @@ bool tlv_session_init(const char *csv_folder_path, const char *pack_types_ini_pa
 bool tlv_session_process_batch(const char **filenames, uint32_t filename_count,
                               uint32_t pack_type_id, TLV_Record *output_records,
                               ProcessingSummary *processing_summary);
+
+/**
+ * @brief Inject group_id fields into per-file records after batch processing.
+ *
+ * Derives the canonical group name for each record from its display_name,
+ * assigns a uint16 group_id (1-based) shared across all records with the
+ * same canonical name, and appends a group_id TLV entry to each record.
+ *
+ * Must be called before merging records into the aggregate and before
+ * tlv_write_record_with_metadata.  The group map accumulated here is later
+ * written as block 0x02 by tlv_write_group_map / tlv_write_record_with_metadata.
+ *
+ * @param records       Array of per-file TLV records produced by tlv_session_process_batch.
+ * @param count         Number of records in the array.
+ * @return true if the group map was built successfully; false on OOM or if the
+ *         session is not initialised.
+ */
+bool tlv_session_inject_group_ids(TLV_Record *records, uint32_t count);
+
+/**
+ * @brief Write the group-map header block (type 0x02) to a TLV file.
+ *
+ * Must be called after tlv_write_metadata_map and tlv_write_csv_fingerprints
+ * but before any variant records are written.  tlv_write_record_with_metadata
+ * calls this automatically.
+ *
+ * Wire format:
+ *   [1 byte : 0x02 (TLV_TYPE_GROUP_MAP)]
+ *   [2 bytes LE: payload_size]
+ *   [2 bytes LE: group_count]
+ *   per entry:
+ *     [2 bytes BE: group_id]
+ *     [1 byte   : name_len]
+ *     [name_len bytes: group_name (no NUL)]
+ *
+ * @param file Output file positioned immediately after block 0x04.
+ * @return true on success; false on write error.
+ */
+bool tlv_write_group_map(FILE *file);
 
 /**
  * @brief Finalize TLV processing session and cleanup resources

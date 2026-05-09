@@ -694,6 +694,13 @@ static bool process_dat_file(const char *dat_path,
         }
     }
 
+    /* Inject group_id fields into per-file records.
+     * Must happen before aggregation so group_id entries are merged in. */
+    if (!tlv_session_inject_group_ids(records, (uint32_t)filename_count)) {
+        fprintf(stderr, "WARNING: failed to inject group_id fields\n");
+        append_to_log("WARNING: failed to inject group_id fields");
+    }
+
 #ifdef PLATFORM_AMIGA
     print_amiga_stage("aggregating TLV records");
 #endif

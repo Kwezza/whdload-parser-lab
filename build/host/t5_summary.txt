@@ -1,0 +1,12 @@
+CSV CRC: OK  (3 files checked)
+Search         : alien*
+Matched groups : 1
+TLV     : tests\filtering\tiny_games.tlv
+Profile : tests\filtering\profile_aga_en.profile
+Variants: 11
+Groups  : 5
+Selected: 1
+Variants rejected: 2
+Groups rejected  : 0
+Warnings: yes
+Output  : build\host\t5_out.txt

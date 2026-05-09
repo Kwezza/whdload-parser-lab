@@ -20,6 +20,7 @@
 #include <tlv_filename/embedded_metadata.h>
 #include <io/pack_types_loader.h>
 #include <io/writeLog.h>
+#include <group_util.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -45,6 +46,100 @@ static GlobalCSVManager session_csv_manager = {0};
 static PackType *session_pack_types = NULL;
 static size_t session_pack_count = 0;
 static bool session_initialized = false;
+
+/*------------------------------------------------------------------------*/
+/* Internal group-map state                                               */
+
+#define GROUP_MAP_NAME_MAX    128u
+#define GROUP_MAP_INITIAL_CAP 512u
+
+typedef struct {
+    char     name[GROUP_MAP_NAME_MAX];
+    uint16_t id;
+} GroupMapEntry;
+
+typedef struct {
+    GroupMapEntry *entries;
+    uint32_t       count;
+    uint32_t       capacity;
+    uint16_t       next_id;  /* 1-based; 0 is sentinel "not present" */
+} GroupMap;
+
+static GroupMap session_group_map;
+
+static void group_map_free_internal(GroupMap *gm)
+{
+    if (!gm) {
+        return;
+    }
+    if (gm->entries) {
+        whd_free(gm->entries);
+        gm->entries = NULL;
+    }
+    gm->count    = 0u;
+    gm->capacity = 0u;
+    gm->next_id  = 1u;
+}
+
+static bool group_map_init_internal(GroupMap *gm)
+{
+    group_map_free_internal(gm);
+    gm->entries = (GroupMapEntry *)whd_malloc(
+        GROUP_MAP_INITIAL_CAP * sizeof(GroupMapEntry));
+    if (!gm->entries) {
+        return false;
+    }
+    gm->capacity = GROUP_MAP_INITIAL_CAP;
+    gm->next_id  = 1u;
+    return true;
+}
+
+/* Returns 0 on OOM or group_id overflow; otherwise a 1-based group_id. */
+static uint16_t group_map_get_or_insert(GroupMap *gm, const char *name)
+{
+    GroupMapEntry *entry;
+    uint32_t       i;
+
+    if (!gm || !name || name[0] == '\0') {
+        return 0u;
+    }
+
+    for (i = 0u; i < gm->count; i++) {
+        if (strcmp(gm->entries[i].name, name) == 0) {
+            return gm->entries[i].id;
+        }
+    }
+
+    /* Overflow guard: next_id wraps to 0 after 65535. */
+    if (gm->next_id == 0u) {
+        fprintf(stderr,
+                "ERROR: group_id overflow: more than 65535 distinct groups.\n");
+        append_to_log("ERROR: group_id overflow: more than 65535 distinct groups.");
+        return 0u;
+    }
+
+    /* Grow if needed. */
+    if (gm->count >= gm->capacity) {
+        uint32_t       new_cap      = gm->capacity * 2u;
+        GroupMapEntry *new_entries  =
+            (GroupMapEntry *)whd_malloc(new_cap * sizeof(GroupMapEntry));
+        if (!new_entries) {
+            return 0u;
+        }
+        memcpy(new_entries, gm->entries, gm->count * sizeof(GroupMapEntry));
+        whd_free(gm->entries);
+        gm->entries  = new_entries;
+        gm->capacity = new_cap;
+    }
+
+    entry = &gm->entries[gm->count];
+    strncpy(entry->name, name, GROUP_MAP_NAME_MAX - 1u);
+    entry->name[GROUP_MAP_NAME_MAX - 1u] = '\0';
+    entry->id = gm->next_id;
+    gm->count++;
+    gm->next_id++;
+    return entry->id;
+}
 
 #ifdef PLATFORM_AMIGA
 #define TLV_HEARTBEAT_INTERVAL_TICKS (2UL * 50UL)
@@ -657,6 +752,10 @@ bool tlv_write_record_with_metadata(FILE *file,
         if (!tlv_write_csv_fingerprints(file, &session_csv_manager)) {
             return false;
         }
+        /* Write group map block (0x02) after fingerprints, before variant records */
+        if (!tlv_write_group_map(file)) {
+            return false;
+        }
     }
 
     /* Write each TLV entry */
@@ -1016,6 +1115,9 @@ void tlv_session_finalize(void) {
         return;
     }
 
+    /* Release group map */
+    group_map_free_internal(&session_group_map);
+
     /* Cleanup CSV cache manager */
     csv_cache_manager_cleanup(&session_csv_manager);
 
@@ -1034,6 +1136,167 @@ void tlv_session_finalize(void) {
     }
 
     session_initialized = false;
+}
+
+/*------------------------------------------------------------------------*/
+/* Group-ID injection and group-map write                                */
+
+/**
+ * @brief Inject group_id fields into per-file records after batch processing.
+ *
+ * Iterates records, derives canonical group names from each record's
+ * display_name field, assigns shared uint16 group IDs, and appends a
+ * group_id TLV entry (2-byte big-endian payload) to each record.
+ *
+ * Must be called before merging records into the aggregate and before
+ * tlv_write_record_with_metadata.
+ */
+bool tlv_session_inject_group_ids(TLV_Record *records, uint32_t count)
+{
+    uint8_t  display_field_id;
+    uint8_t  group_field_id;
+    uint32_t i;
+
+    if (!records || count == 0u || !session_initialized) {
+        return false;
+    }
+
+    display_field_id = field_registry_get_id(session_field_registry, "display_name");
+    group_field_id   = field_registry_get_id(session_field_registry, "group_id");
+
+    if (display_field_id == 0u || group_field_id == 0u) {
+        fprintf(stderr,
+                "WARNING: tlv_session_inject_group_ids: "
+                "display_name or group_id not found in registry\n");
+        return false;
+    }
+
+    if (!group_map_init_internal(&session_group_map)) {
+        return false;
+    }
+
+    for (i = 0u; i < count; i++) {
+        const TLV_Entry *dn_entry;
+        char             raw_name[GROUP_MAP_NAME_MAX];
+        char             derived[GROUP_MAP_NAME_MAX];
+        uint8_t          id_buf[2];
+        uint16_t         gid;
+        size_t           name_len;
+
+        if (records[i].entry_count == 0u) {
+            continue;
+        }
+
+        dn_entry = tlv_record_get_entry(&records[i], display_field_id);
+        if (!dn_entry || !dn_entry->value || dn_entry->length == 0u) {
+            continue;
+        }
+
+        /* Copy display_name into a NUL-terminated temp buffer. */
+        name_len = (dn_entry->length < GROUP_MAP_NAME_MAX - 1u)
+                       ? (size_t)dn_entry->length
+                       : (size_t)(GROUP_MAP_NAME_MAX - 1u);
+        memcpy(raw_name, dn_entry->value, name_len);
+        raw_name[name_len] = '\0';
+
+        /* Derive canonical group name. */
+        derive_group_name(raw_name, derived, GROUP_MAP_NAME_MAX);
+
+        gid = group_map_get_or_insert(&session_group_map, derived);
+        if (gid == 0u) {
+            /* OOM or overflow — leave this record without group_id. */
+            continue;
+        }
+
+        /* Emit as 2-byte big-endian payload. */
+        id_buf[0] = (uint8_t)((gid >> 8) & 0xFFu);
+        id_buf[1] = (uint8_t)(gid        & 0xFFu);
+
+        tlv_record_add_entry(&records[i], group_field_id, id_buf, 2u);
+    }
+
+    return true;
+}
+
+/**
+ * @brief Write the group-map header block (type 0x02) to a TLV file.
+ *
+ * Wire format:
+ *   [1 byte  : 0x02 (TLV_TYPE_GROUP_MAP)]
+ *   [2 bytes LE: payload_size]
+ *   [2 bytes LE: group_count]
+ *   per entry:
+ *     [2 bytes BE: group_id]
+ *     [1 byte   : name_len]
+ *     [name_len bytes: group_name (no NUL terminator)]
+ */
+bool tlv_write_group_map(FILE *file)
+{
+    uint8_t  block_type;
+    uint16_t payload_size;
+    uint16_t group_count;
+    uint32_t i;
+
+    if (!file) {
+        return false;
+    }
+
+    if (session_group_map.count == 0u) {
+        return true; /* no groups — nothing to write */
+    }
+
+    /* Calculate payload: 2 bytes (group_count field) + per-entry bytes. */
+    payload_size = 2u;
+    for (i = 0u; i < session_group_map.count; i++) {
+        size_t nlen = strlen(session_group_map.entries[i].name);
+        if (nlen > 255u) {
+            nlen = 255u;
+        }
+        payload_size += (uint16_t)(2u + 1u + nlen); /* id(2) + len(1) + name */
+    }
+
+    block_type  = TLV_TYPE_GROUP_MAP;
+    group_count = (uint16_t)session_group_map.count;
+
+    if (fwrite(&block_type,   1u, 1u, file) != 1u) {
+        return false;
+    }
+    if (fwrite(&payload_size, 2u, 1u, file) != 1u) {
+        return false;
+    }
+    if (fwrite(&group_count,  2u, 1u, file) != 1u) {
+        return false;
+    }
+
+    for (i = 0u; i < session_group_map.count; i++) {
+        uint8_t  id_be[2];
+        uint8_t  name_len_byte;
+        size_t   nlen;
+        uint16_t gid = session_group_map.entries[i].id;
+
+        nlen = strlen(session_group_map.entries[i].name);
+        if (nlen > 255u) {
+            nlen = 255u;
+        }
+
+        id_be[0]      = (uint8_t)((gid >> 8) & 0xFFu);
+        id_be[1]      = (uint8_t)(gid        & 0xFFu);
+        name_len_byte = (uint8_t)nlen;
+
+        if (fwrite(id_be,          1u, 2u, file) != 2u) {
+            return false;
+        }
+        if (fwrite(&name_len_byte, 1u, 1u, file) != 1u) {
+            return false;
+        }
+        if (nlen > 0u) {
+            if (fwrite(session_group_map.entries[i].name, 1u, nlen, file) != nlen) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 /*------------------------------------------------------------------------*/

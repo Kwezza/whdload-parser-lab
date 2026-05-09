@@ -71,6 +71,8 @@ static void set_csv_base_for_field(FieldDefinition *field, const char *field_nam
         base = ""; /* Internal display string, not CSV backed */
     } else if (strcmp(field_name, "archive_info") == 0) {
         base = ""; /* DAT transport field, no CSV backing */
+    } else if (strcmp(field_name, "group_id") == 0) {
+        base = ""; /* Structural grouping key, not CSV backed */
     }
 
     /* Store base name without extension; csv_cache will append .csv */
@@ -114,6 +116,28 @@ FieldRegistry *field_registry_alloc(void)
         strncpy(field->field_name, "display_name", sizeof(field->field_name) - 1);
         field->field_name[sizeof(field->field_name) - 1] = '\0';
         set_csv_base_for_field(field, "display_name");
+        field->is_active = true;
+        field->allow_multiple = false;
+        field->prescan_enabled = false;
+        field->prescan_order = 1000;
+        field->prescan_multi_token = true;
+        field->prescan_remove = true;
+        field->prescan_allow_multiple = false;
+        field->prescan_csv_override[0] = '\0';
+        field->has_default = false;
+        field->default_token_id = 0;
+        registry->field_count++;
+        registry->next_field_id++;
+    }
+
+    /* Inject implicit group_id field (second implicit field after display_name, always 0x05).
+     * Not CSV-backed; not scoreable; excluded from profile filter binding.              */
+    {
+        FieldDefinition *field = &registry->fields[registry->field_count];
+        field->field_id = registry->next_field_id; /* 0x05 */
+        strncpy(field->field_name, "group_id", sizeof(field->field_name) - 1);
+        field->field_name[sizeof(field->field_name) - 1] = '\0';
+        set_csv_base_for_field(field, "group_id");
         field->is_active = true;
         field->allow_multiple = false;
         field->prescan_enabled = false;

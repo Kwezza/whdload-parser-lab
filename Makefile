@@ -15,6 +15,7 @@ ifeq ($(TARGET),amiga)
 	LDFLAGS := -lamiga -lauto
 	BUILD_DIR := build/amiga
 	BIN := $(BUILD_DIR)/dat_to_tlv
+	BIN_FH := $(BUILD_DIR)/filter_harness
 	RUN_CMD = @echo Amiga binary built: $(subst /,\,$(BIN))
 else
 	CC := gcc
@@ -22,6 +23,7 @@ else
 	LDFLAGS :=
 	BUILD_DIR := build/host
 	BIN := $(BUILD_DIR)/dat_to_tlv.exe
+	BIN_FH := $(BUILD_DIR)/filter_harness.exe
 	RUN_CMD = $(subst /,\,$(BIN))
 endif
 
@@ -42,6 +44,7 @@ SRC := \
 	src_raw/csv_cache.c \
 	src_raw/filename_processor.c \
 	src_raw/tlv_builder.c \
+	src_raw/group_util.c \
 	src/platform/platform_io.c \
 	src/platform/platform_string.c \
 	src/io/writeLog.c \
@@ -51,7 +54,31 @@ SRC := \
 
 OBJ := $(SRC:%.c=$(BUILD_DIR)/%.o)
 
-.PHONY: all clean run help host amiga
+# Filter harness sources (Stage A: scaffold only; expanded in later chunks)
+SRC_FH := \
+	tools/filter_harness/main.c \
+	src_raw/filtering/tlv_filter.c \
+	src_raw/filtering/tlv_runtime.c \
+	src_raw/filtering/tlv_reader.c \
+	src_raw/filtering/tlv_crc_validate.c \
+	src_raw/filtering/tlv_variant.c \
+	src_raw/filtering/tlv_group.c \
+	src_raw/filtering/tlv_select.c \
+	src_raw/filtering/tlv_results.c \
+	src_raw/filtering/profile_binder.c \
+	src_raw/filtering/whd_search.c \
+	src_raw/group_util.c \
+	src/platform/platform_io.c \
+	src/platform/platform_string.c \
+	src/utils/crc32.c
+
+OBJ_FH := $(SRC_FH:%.c=$(BUILD_DIR)/%.o)
+
+# Fixture generator sources (Stage J: regression fixtures; host-only)
+SRC_GF := tools/gen_fixture_tlv/gen_fixture_tlv.c
+BIN_GF  := $(BUILD_DIR)/gen_fixture_tlv.exe
+
+.PHONY: all clean run help host amiga filter_harness gen_fixture_tlv gen_fixtures test_filter
 
 all: $(BIN)
 
@@ -60,6 +87,12 @@ host:
 
 amiga:
 	$(MAKE) TARGET=amiga all
+
+filter_harness: $(BIN_FH)
+
+$(BIN_FH): $(OBJ_FH)
+	@$(call MKDIR_CMD,$(BUILD_DIR))
+	$(CC) $(CFLAGS) -o $@ $(OBJ_FH) $(LDFLAGS)
 
 help:
 	@echo dat_to_tlv standalone build targets
@@ -70,6 +103,10 @@ help:
 	@echo   make host            - Shortcut for host build
 	@echo   make amiga           - Shortcut for Amiga build
 	@echo   make run             - Run host binary when TARGET=host
+	@echo   make filter_harness  - Build filter_harness binary
+	@echo   make gen_fixture_tlv - Build the fixture TLV generator
+	@echo   make gen_fixtures    - Build generator and emit tests\filtering TLV files
+	@echo   make test_filter     - Run regression tests against fixture TLVs
 	@echo   make clean           - Remove build output for current TARGET and default TLV output
 	@echo.
 	@echo Variables:
@@ -87,6 +124,18 @@ $(BUILD_DIR)/%.o: %.c
 
 run: $(BIN)
 	$(RUN_CMD)
+
+$(BIN_GF): $(SRC_GF)
+	@$(call MKDIR_CMD,$(BUILD_DIR)/tools/gen_fixture_tlv)
+	$(CC) $(CFLAGS) -o $@ $(SRC_GF)
+
+gen_fixture_tlv: $(BIN_GF)
+
+gen_fixtures: $(BIN_GF)
+	$(subst /,\,$(BIN_GF))
+
+test_filter: $(BIN_FH) gen_fixtures
+	tests\filtering\run_tests.bat $(subst /,\,$(BIN_FH))
 
 clean:
 	@$(call RMDIR_CMD,$(BUILD_DIR))
