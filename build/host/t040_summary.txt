@@ -1,0 +1,10 @@
+CSV CRC: OK  (3 files checked)
+TLV     : tests\filtering\tlv\tiny_groupid_high.tlv
+Profile : tests\filtering\profiles\t040_t042_endian.profile
+Variants: 2
+Groups  : 1
+Selected variants : 1
+Selected groups   : 1
+Variants rejected: 0
+Groups rejected  : 0
+Output  : build\host\t040_out.txt

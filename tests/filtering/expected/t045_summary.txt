@@ -1,0 +1,12 @@
+CSV CRC: OK  (11 files checked)
+Search         : Alien*
+Matched groups : 1
+TLV     : output\GamB(2026-04-26).tlv
+Profile : assets_raw\profiles\pal_aga_4mb.profile
+Variants: 128
+Groups  : 107
+Selected variants : 1
+Selected groups   : 1
+Variants rejected: 0
+Groups rejected  : 0
+Output  : tests\filtering\expected\t045_expected.txt

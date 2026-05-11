@@ -1,0 +1,12 @@
+CSV CRC: OK  (5 files checked)
+Search         : Lotus
+Matched groups : 4
+TLV     : tests\filtering\tlv\tiny_regression_games.tlv
+Profile : tests\filtering\profiles\t012_t020_chipset_aga_ocs.profile
+Variants: 44
+Groups  : 22
+Selected variants : 4
+Selected groups   : 4
+Variants rejected: 0
+Groups rejected  : 0
+Output  : build\host\t020_out.txt

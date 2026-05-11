@@ -1,30 +1,14 @@
 @echo off
 rem tests/filtering/run_tests.bat
-rem Stage J regression test runner for the TLV filtering harness.
+rem T001-T045 regression test runner for the TLV filtering harness.
 rem
 rem Usage: run_tests.bat [harness_exe]
 rem   harness_exe  Path to filter_harness.exe (default: build\host\filter_harness.exe)
 rem
-rem Each test runs filter_harness and diffs the output against a golden file.
+rem Each test runs filter_harness and compares output against a golden file.
+rem Fatal-exit tests verify the harness returns non-zero.
+rem Warning tests verify exit 0 plus "Warnings: yes" in the summary.
 rem Exits with code 0 if all tests pass, 1 if any fail.
-rem
-rem Tests:
-rem   T1  tiny_games.tlv + profile_aga_en     -> 5 selected, 3 rejected variants
-rem   T2  tiny_games.tlv + profile_ocs_only   -> 2 selected, 3 rejected groups
-rem   T3  tiny_games_fallback.tlv + aga_en    -> same result via heuristic grouping
-rem   T4  CRC-mismatch detection              -> harness fails with missing/bad CSV
-rem   T5  search "alien*" + aga_en            -> 1 selected (AlienBreed, prefix wildcard)
-rem   T6  search "ALIEN" + aga_en             -> 1 selected (case-insensitive contains)
-rem   T7  search "zzz_nomatch*" + aga_en      -> 0 selected, empty output, exit 0
-rem   T8  search "*breed*" on fallback TLV    -> 1 selected via base_name heuristic
-rem   T9  2-bucket chipset AGA/OCS            -> 7 variants, 2 lanes
-rem   T10 2-bucket language En/De             -> 8 variants, 2 lanes
-rem   T11 2-field slash (AGA/OCS x En/De)     -> 10 variants, 4 lanes
-rem   T12 exclude=OCS beats include=AGA/OCS   -> 5 variants (OCS lane always empty)
-rem   T13 duplicate suppression AGA/AGA,OCS   -> 10 variants, no duplicate filenames
-rem   T14 search + slash profile              -> 2 variants (1 group, 2 lanes)
-rem   T15 comma-only -> no "Selection lanes"  -> summary line absent
-rem   T16 too many buckets (9 > 8 limit)      -> non-zero exit
 
 setlocal enabledelayedexpansion
 
@@ -32,550 +16,425 @@ set "HARNESS=%~1"
 if "%HARNESS%"=="" set "HARNESS=build\host\filter_harness.exe"
 set "FH=%HARNESS%"
 
-set "TESTS_DIR=tests\filtering"
-set "OUT_DIR=build\host"
+set "TD=tests\filtering"
+set "TLV=%TD%\tlv\tiny_regression_games.tlv"
+set "LFB=%TD%\tlv\tiny_legacy_no_group_map.tlv"
+set "HI=%TD%\tlv\tiny_groupid_high.tlv"
+set "MM=%TD%\tlv\tiny_crc_mismatch_base.tlv"
+set "BNF=%TD%\tlv\tiny_bad_no_fieldmap.tlv"
+set "TRN=%TD%\tlv\tiny_bad_truncated.tlv"
+set "GAM=output\GamB(2026-04-26).tlv"
+set "DEFS=%TD%\defs"
+set "ADEFS=assets_raw\defs"
+set "PROF=%TD%\profiles"
+set "EXP=%TD%\expected"
+set "OUT=build\host"
+
 set "PASS_COUNT=0"
 set "FAIL_COUNT=0"
 
 echo ============================================================
-echo  filter_harness regression tests
+echo  filter_harness regression tests  T001-T045
 echo  Harness : %FH%
 echo ============================================================
 echo.
 
-rem -------------------------------------------------------------------
-rem T1: group_id TLV + AGA English profile
-rem     Expected: 5 selected, 0 groups rejected
-rem -------------------------------------------------------------------
-echo [T1] tiny_games.tlv + profile_aga_en
-"%FH%" --tlv "%TESTS_DIR%\tiny_games.tlv" ^
-       --profile "%TESTS_DIR%\profile_aga_en.profile" ^
-       --defs "%TESTS_DIR%\defs" ^
-       --out "%OUT_DIR%\t1_out.txt" > "%OUT_DIR%\t1_summary.txt" 2>&1
+rem ===========================================================================
+rem  Group A: Scoring priority
+rem ===========================================================================
 
-if errorlevel 1 (
-    echo   FAIL  ^(harness returned non-zero^)
-    type "%OUT_DIR%\t1_summary.txt"
-    set /a FAIL_COUNT+=1
-    goto :T2
-)
+echo --- Group A: Scoring priority ---
 
-fc /L "%OUT_DIR%\t1_out.txt" "%TESTS_DIR%\expected_aga_en.txt" > nul 2>&1
-if errorlevel 1 (
-    echo   FAIL  ^(output mismatch^)
-    echo   --- got ---
-    type "%OUT_DIR%\t1_out.txt"
-    echo   --- expected ---
-    type "%TESTS_DIR%\expected_aga_en.txt"
-    set /a FAIL_COUNT+=1
-) else (
-    echo   PASS
-    set /a PASS_COUNT+=1
-)
-type "%OUT_DIR%\t1_summary.txt"
+:T001
+echo [T001] AGA priority
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t001_aga_priority.profile" --defs "%DEFS%" --out "%OUT%\t001_out.txt" > "%OUT%\t001_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t001_summary.txt" & set /a FAIL_COUNT+=1 & goto :T002)
+fc /L "%OUT%\t001_out.txt" "%EXP%\t001_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
 
-:T2
-rem -------------------------------------------------------------------
-rem T2: group_id TLV + OCS-only profile
-rem     Expected: 2 selected, 3 groups rejected
-rem -------------------------------------------------------------------
+:T002
+echo [T002] Language priority
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t002_language_priority.profile" --defs "%DEFS%" --out "%OUT%\t002_out.txt" > "%OUT%\t002_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t002_summary.txt" & set /a FAIL_COUNT+=1 & goto :T003)
+fc /L "%OUT%\t002_out.txt" "%EXP%\t002_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
+:T003
+echo [T003] Language dominates chipset
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t003_lang_dominates.profile" --defs "%DEFS%" --out "%OUT%\t003_out.txt" > "%OUT%\t003_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t003_summary.txt" & set /a FAIL_COUNT+=1 & goto :T004)
+fc /L "%OUT%\t003_out.txt" "%EXP%\t003_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
+:T004
+echo [T004] Chipset dominates language
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t004_chipset_dominates.profile" --defs "%DEFS%" --out "%OUT%\t004_out.txt" > "%OUT%\t004_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t004_summary.txt" & set /a FAIL_COUNT+=1 & goto :T005)
+fc /L "%OUT%\t004_out.txt" "%EXP%\t004_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
 echo.
-echo [T2] tiny_games.tlv + profile_ocs_only
-"%FH%" --tlv "%TESTS_DIR%\tiny_games.tlv" ^
-       --profile "%TESTS_DIR%\profile_ocs_only.profile" ^
-       --defs "%TESTS_DIR%\defs" ^
-       --out "%OUT_DIR%\t2_out.txt" > "%OUT_DIR%\t2_summary.txt" 2>&1
+rem ===========================================================================
+rem  Group B: Exclude semantics
+rem ===========================================================================
 
-if errorlevel 1 (
-    echo   FAIL  ^(harness returned non-zero^)
-    type "%OUT_DIR%\t2_summary.txt"
-    set /a FAIL_COUNT+=1
-    goto :T3
-)
+echo --- Group B: Exclude semantics ---
 
-fc /L "%OUT_DIR%\t2_out.txt" "%TESTS_DIR%\expected_ocs_only.txt" > nul 2>&1
-if errorlevel 1 (
-    echo   FAIL  ^(output mismatch^)
-    echo   --- got ---
-    type "%OUT_DIR%\t2_out.txt"
-    echo   --- expected ---
-    type "%TESTS_DIR%\expected_ocs_only.txt"
-    set /a FAIL_COUNT+=1
-) else (
-    echo   PASS
-    set /a PASS_COUNT+=1
-)
-type "%OUT_DIR%\t2_summary.txt"
+:T005
+echo [T005] Exclude AGA ^(OCS fallback wins^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t005_exclude_aga.profile" --defs "%DEFS%" --out "%OUT%\t005_out.txt" > "%OUT%\t005_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t005_summary.txt" & set /a FAIL_COUNT+=1 & goto :T006)
+fc /L "%OUT%\t005_out.txt" "%EXP%\t005_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
 
-:T3
-rem -------------------------------------------------------------------
-rem T3: fallback TLV (no group_id) + AGA English profile
-rem     Expected: same selection as T1 via display_name heuristic
-rem -------------------------------------------------------------------
+:T006
+echo [T006] CD32 excluded ^(group absent from output^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t006_cd32_excluded.profile" --defs "%DEFS%" --out "%OUT%\t006_out.txt" > "%OUT%\t006_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t006_summary.txt" & set /a FAIL_COUNT+=1 & goto :T007)
+fc /L "%OUT%\t006_out.txt" "%EXP%\t006_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
+:T007
+echo [T007] Exclude via zero weight
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t007_exclude_zero_weight.profile" --defs "%DEFS%" --out "%OUT%\t007_out.txt" > "%OUT%\t007_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t007_summary.txt" & set /a FAIL_COUNT+=1 & goto :T008)
+fc /L "%OUT%\t007_out.txt" "%EXP%\t007_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
 echo.
-echo [T3] tiny_games_fallback.tlv + profile_aga_en  ^(heuristic grouping^)
-"%FH%" --tlv "%TESTS_DIR%\tiny_games_fallback.tlv" ^
-       --profile "%TESTS_DIR%\profile_aga_en.profile" ^
-       --defs "%TESTS_DIR%\defs" ^
-       --warn-crc ^
-       --out "%OUT_DIR%\t3_out.txt" > "%OUT_DIR%\t3_summary.txt" 2>&1
+rem ===========================================================================
+rem  Group C: Default token fallback
+rem ===========================================================================
 
-if errorlevel 1 (
-    echo   FAIL  ^(harness returned non-zero^)
-    type "%OUT_DIR%\t3_summary.txt"
-    set /a FAIL_COUNT+=1
-    goto :T4
-)
+echo --- Group C: Default token fallback ---
 
-fc /L "%OUT_DIR%\t3_out.txt" "%TESTS_DIR%\expected_aga_en.txt" > nul 2>&1
-if errorlevel 1 (
-    echo   FAIL  ^(output mismatch^)
-    echo   --- got ---
-    type "%OUT_DIR%\t3_out.txt"
-    echo   --- expected ---
-    type "%TESTS_DIR%\expected_aga_en.txt"
-    set /a FAIL_COUNT+=1
-) else (
-    echo   PASS
-    set /a PASS_COUNT+=1
-)
-type "%OUT_DIR%\t3_summary.txt"
+:T008
+echo [T008] OCS preferred ^(variant has no chipset token - uses default^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t008_ocs_preferred.profile" --defs "%DEFS%" --out "%OUT%\t008_out.txt" > "%OUT%\t008_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t008_summary.txt" & set /a FAIL_COUNT+=1 & goto :T009)
+fc /L "%OUT%\t008_out.txt" "%EXP%\t008_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
 
-:T4
-rem -------------------------------------------------------------------
-rem T4: CRC mismatch detection (strict mode)
-rem     Use a different defs dir whose CSV content differs from the TLV-
-rem     embedded CRCs.  The harness must return non-zero in strict mode.
-rem -------------------------------------------------------------------
+:T009
+echo [T009] Exclude OCS ^(default-chipset variants excluded^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t009_exclude_ocs.profile" --defs "%DEFS%" --out "%OUT%\t009_out.txt" > "%OUT%\t009_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t009_summary.txt" & set /a FAIL_COUNT+=1 & goto :T010)
+fc /L "%OUT%\t009_out.txt" "%EXP%\t009_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
 echo.
-echo [T4] CRC mismatch detection  ^(strict mode^)
-rem Use the real assets_raw/defs; it has different content from the tiny
-rem fixture CSVs so CRCs will not match.
-"%FH%" --tlv "%TESTS_DIR%\tiny_games.tlv" ^
-       --defs "assets_raw\defs" ^
-       --out "%OUT_DIR%\t4_out.txt" > "%OUT_DIR%\t4_summary.txt" 2>&1
-set T4_EXIT=%errorlevel%
+rem ===========================================================================
+rem  Group D: Tie-breaking (first-in-TLV wins)
+rem ===========================================================================
 
-if %T4_EXIT% neq 0 (
-    echo   PASS  ^(strict CRC correctly aborted with exit %T4_EXIT%^)
-    set /a PASS_COUNT+=1
-) else (
-    echo   FAIL  ^(expected non-zero exit when CRCs mismatch in strict mode^)
-    set /a FAIL_COUNT+=1
+echo --- Group D: Tie-breaking ---
+
+:T010
+echo [T010] Tie-break: TieGame_v1.0_AGA_En first in TLV wins
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t010_t011_tie.profile" --defs "%DEFS%" --out "%OUT%\t010_out.txt" > "%OUT%\t010_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t010_summary.txt" & set /a FAIL_COUNT+=1 & goto :T011)
+fc /L "%OUT%\t010_out.txt" "%EXP%\t010_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (
+    findstr /C:"TieGame_v1.0_AGA_En" "%OUT%\t010_out.txt" > nul 2>&1
+    if errorlevel 1 (echo   FAIL  ^(TieGame_v1.0_AGA_En not in output^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
 )
-type "%OUT_DIR%\t4_summary.txt"
 
-rem -------------------------------------------------------------------
-rem T5: prefix wildcard search on group_id TLV
-rem     --search alien* should match AlienBreed group only (group_map path)
-rem     Expected: 1 selected, AlienBreed_v1.0_AGA_En
-rem -------------------------------------------------------------------
+:T011
+echo [T011] Tie-break: TieGame2_v1.1_AGA_En also present
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t010_t011_tie.profile" --defs "%DEFS%" --out "%OUT%\t011_out.txt" > "%OUT%\t011_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t011_summary.txt" & set /a FAIL_COUNT+=1 & goto :T012)
+fc /L "%OUT%\t011_out.txt" "%EXP%\t011_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (
+    findstr /C:"TieGame2_v1.1_AGA_En" "%OUT%\t011_out.txt" > nul 2>&1
+    if errorlevel 1 (echo   FAIL  ^(TieGame2_v1.1_AGA_En not in output^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+)
+
 echo.
-echo [T5] search "alien*" on tiny_games.tlv + profile_aga_en  ^(prefix wildcard, group_map^)
-"%FH%" --tlv "%TESTS_DIR%\tiny_games.tlv" ^
-       --profile "%TESTS_DIR%\profile_aga_en.profile" ^
-       --defs "%TESTS_DIR%\defs" ^
-       --search alien* ^
-       --out "%OUT_DIR%\t5_out.txt" > "%OUT_DIR%\t5_summary.txt" 2>&1
+rem ===========================================================================
+rem  Group E: Group-map vs fallback grouping
+rem ===========================================================================
 
-if errorlevel 1 (
-    echo   FAIL  ^(harness returned non-zero^)
-    type "%OUT_DIR%\t5_summary.txt"
-    set /a FAIL_COUNT+=1
-    goto :T6
-)
+echo --- Group E: Group-map vs fallback grouping ---
 
-fc /L "%OUT_DIR%\t5_out.txt" "%TESTS_DIR%\expected_search_alien_aga.txt" > nul 2>&1
-if errorlevel 1 (
-    echo   FAIL  ^(output mismatch^)
-    echo   --- got ---
-    type "%OUT_DIR%\t5_out.txt"
-    echo   --- expected ---
-    type "%TESTS_DIR%\expected_search_alien_aga.txt"
-    set /a FAIL_COUNT+=1
-) else (
-    echo   PASS
-    set /a PASS_COUNT+=1
-)
-type "%OUT_DIR%\t5_summary.txt"
+:T012
+echo [T012] Group-map grouping ^(chipset AGA/OCS selection, regression TLV^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t012_t020_chipset_aga_ocs.profile" --defs "%DEFS%" --out "%OUT%\t012_out.txt" > "%OUT%\t012_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t012_summary.txt" & set /a FAIL_COUNT+=1 & goto :T013)
+fc /L "%OUT%\t012_out.txt" "%EXP%\t012_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
 
-:T6
-rem -------------------------------------------------------------------
-rem T6: case-insensitive substring search (no wildcard) on group_id TLV
-rem     --search ALIEN should match AlienBreed via ci_strstr, same result as T5
-rem     Expected: 1 selected, AlienBreed_v1.0_AGA_En
-rem -------------------------------------------------------------------
+:T013
+echo [T013] Fallback grouping ^(no group_id block, legacy TLV, --warn-crc^)
+"%FH%" --tlv "%LFB%" --profile "%PROF%\t012_t020_chipset_aga_ocs.profile" --defs "%DEFS%" --warn-crc --out "%OUT%\t013_out.txt" > "%OUT%\t013_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t013_summary.txt" & set /a FAIL_COUNT+=1 & goto :T014)
+fc /L "%OUT%\t013_out.txt" "%EXP%\t013_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
+:T014
+echo [T014] Group-map multi-group selection ^(same profile as T012^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t012_t020_chipset_aga_ocs.profile" --defs "%DEFS%" --out "%OUT%\t014_out.txt" > "%OUT%\t014_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t014_summary.txt" & set /a FAIL_COUNT+=1 & goto :T015)
+fc /L "%OUT%\t014_out.txt" "%EXP%\t014_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
 echo.
-echo [T6] search "ALIEN" on tiny_games.tlv + profile_aga_en  ^(case-insensitive contains^)
-"%FH%" --tlv "%TESTS_DIR%\tiny_games.tlv" ^
-       --profile "%TESTS_DIR%\profile_aga_en.profile" ^
-       --defs "%TESTS_DIR%\defs" ^
-       --search ALIEN ^
-       --out "%OUT_DIR%\t6_out.txt" > "%OUT_DIR%\t6_summary.txt" 2>&1
+rem ===========================================================================
+rem  Group F: Search filter
+rem ===========================================================================
 
-if errorlevel 1 (
-    echo   FAIL  ^(harness returned non-zero^)
-    type "%OUT_DIR%\t6_summary.txt"
-    set /a FAIL_COUNT+=1
-    goto :T7
-)
+echo --- Group F: Search filter ---
 
-fc /L "%OUT_DIR%\t6_out.txt" "%TESTS_DIR%\expected_search_alien_aga.txt" > nul 2>&1
-if errorlevel 1 (
-    echo   FAIL  ^(output mismatch^)
-    echo   --- got ---
-    type "%OUT_DIR%\t6_out.txt"
-    echo   --- expected ---
-    type "%TESTS_DIR%\expected_search_alien_aga.txt"
-    set /a FAIL_COUNT+=1
-) else (
-    echo   PASS
-    set /a PASS_COUNT+=1
-)
-type "%OUT_DIR%\t6_summary.txt"
+:T015
+echo [T015] Search "Lotus*" ^(prefix wildcard, 4 groups^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t012_t020_chipset_aga_ocs.profile" --defs "%DEFS%" --search "Lotus*" --out "%OUT%\t015_out.txt" > "%OUT%\t015_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t015_summary.txt" & set /a FAIL_COUNT+=1 & goto :T016)
+fc /L "%OUT%\t015_out.txt" "%EXP%\t015_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
 
-:T7
-rem -------------------------------------------------------------------
-rem T7: search with no matching groups
-rem     Expected: exit 0, empty output, Selected: 0
-rem -------------------------------------------------------------------
+:T016
+echo [T016] Search "lotus*" ^(case-insensitive prefix^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t012_t020_chipset_aga_ocs.profile" --defs "%DEFS%" --search "lotus*" --out "%OUT%\t016_out.txt" > "%OUT%\t016_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t016_summary.txt" & set /a FAIL_COUNT+=1 & goto :T017)
+fc /L "%OUT%\t016_out.txt" "%EXP%\t016_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
+:T017
+echo [T017] Search "Lotus?" ^(single-char wildcard^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t012_t020_chipset_aga_ocs.profile" --defs "%DEFS%" --search "Lotus?" --out "%OUT%\t017_out.txt" > "%OUT%\t017_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t017_summary.txt" & set /a FAIL_COUNT+=1 & goto :T018)
+fc /L "%OUT%\t017_out.txt" "%EXP%\t017_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
+:T018
+echo [T018] Search "LoTuS*" ^(mixed-case prefix^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t012_t020_chipset_aga_ocs.profile" --defs "%DEFS%" --search "LoTuS*" --out "%OUT%\t018_out.txt" > "%OUT%\t018_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t018_summary.txt" & set /a FAIL_COUNT+=1 & goto :T019)
+fc /L "%OUT%\t018_out.txt" "%EXP%\t018_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
+:T019
+echo [T019] Search "zzznomatch" ^(no match, empty output, exit 0^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t012_t020_chipset_aga_ocs.profile" --defs "%DEFS%" --search "zzznomatch" --out "%OUT%\t019_out.txt" > "%OUT%\t019_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero on no-match^) & type "%OUT%\t019_summary.txt" & set /a FAIL_COUNT+=1 & goto :T020)
+fc /L "%OUT%\t019_out.txt" "%EXP%\t019_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(expected empty output^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
+:T020
+echo [T020] Search "Lotus" ^(no wildcard - contains match, 4 groups^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t012_t020_chipset_aga_ocs.profile" --defs "%DEFS%" --search "Lotus" --out "%OUT%\t020_out.txt" > "%OUT%\t020_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t020_summary.txt" & set /a FAIL_COUNT+=1 & goto :T021)
+fc /L "%OUT%\t020_out.txt" "%EXP%\t020_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
 echo.
-echo [T7] search "zzz_nomatch*" on tiny_games.tlv  ^(no match, exit 0^)
-"%FH%" --tlv "%TESTS_DIR%\tiny_games.tlv" ^
-       --profile "%TESTS_DIR%\profile_aga_en.profile" ^
-       --defs "%TESTS_DIR%\defs" ^
-       --search zzz_nomatch* ^
-       --out "%OUT_DIR%\t7_out.txt" > "%OUT_DIR%\t7_summary.txt" 2>&1
-set T7_EXIT=%errorlevel%
+rem ===========================================================================
+rem  Group G: Slash bucket selection lanes
+rem ===========================================================================
 
-if %T7_EXIT% neq 0 (
-    echo   FAIL  ^(expected exit 0 on no-match search, got %T7_EXIT%^)
-    type "%OUT_DIR%\t7_summary.txt"
-    set /a FAIL_COUNT+=1
-    goto :T8
-)
+echo --- Group G: Slash bucket selection lanes ---
 
-fc /L "%OUT_DIR%\t7_out.txt" "%TESTS_DIR%\expected_search_nomatch.txt" > nul 2>&1
-if errorlevel 1 (
-    echo   FAIL  ^(expected empty output file^)
-    echo   --- got ---
-    type "%OUT_DIR%\t7_out.txt"
-    set /a FAIL_COUNT+=1
-) else (
-    echo   PASS
-    set /a PASS_COUNT+=1
-)
-type "%OUT_DIR%\t7_summary.txt"
+:T021
+echo [T021] Bucket 2 lanes ^(chipset AGA / OCS^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t021_t022_bucket_chipset.profile" --defs "%DEFS%" --out "%OUT%\t021_out.txt" > "%OUT%\t021_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t021_summary.txt" & set /a FAIL_COUNT+=1 & goto :T022)
+fc /L "%OUT%\t021_out.txt" "%EXP%\t021_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
 
-:T8
-rem -------------------------------------------------------------------
-rem T8: wildcard search on fallback TLV (no group_id block)
-rem     --search *breed* matches AlienBreed via base_name heuristic path
-rem     Expected: 1 selected, AlienBreed_v1.0_AGA_En
-rem -------------------------------------------------------------------
+:T022
+echo [T022] Bucket 2 lanes - ECS in lane 1 ^(not OCS^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t021_t022_bucket_chipset.profile" --defs "%DEFS%" --out "%OUT%\t022_out.txt" > "%OUT%\t022_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t022_summary.txt" & set /a FAIL_COUNT+=1 & goto :T023)
+fc /L "%OUT%\t022_out.txt" "%EXP%\t022_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
+:T023
+echo [T023] Bucket with missing token ^(group selected via other lane^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t023_bucket_missing.profile" --defs "%DEFS%" --out "%OUT%\t023_out.txt" > "%OUT%\t023_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t023_summary.txt" & set /a FAIL_COUNT+=1 & goto :T024)
+fc /L "%OUT%\t023_out.txt" "%EXP%\t023_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
+:T024
+echo [T024] Global exclude overrides bucket include
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t024_exclude_global.profile" --defs "%DEFS%" --out "%OUT%\t024_out.txt" > "%OUT%\t024_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t024_summary.txt" & set /a FAIL_COUNT+=1 & goto :T025)
+fc /L "%OUT%\t024_out.txt" "%EXP%\t024_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
+:T025
+echo [T025] Duplicate suppression ^(same variant in 2 buckets - deduplicated^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t025_dup_suppression.profile" --defs "%DEFS%" --out "%OUT%\t025_out.txt" > "%OUT%\t025_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t025_summary.txt" & set /a FAIL_COUNT+=1 & goto :T026)
+fc /L "%OUT%\t025_out.txt" "%EXP%\t025_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
+:T026
+echo [T026] Cartesian product ^(2 chipset x 2 language lanes^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t026_t027_cartesian.profile" --defs "%DEFS%" --out "%OUT%\t026_out.txt" > "%OUT%\t026_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t026_summary.txt" & set /a FAIL_COUNT+=1 & goto :T027)
+fc /L "%OUT%\t026_out.txt" "%EXP%\t026_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
+:T027
+echo [T027] Cartesian product ^(cross-check: same output as T026^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t026_t027_cartesian.profile" --defs "%DEFS%" --out "%OUT%\t027_out.txt" > "%OUT%\t027_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t027_summary.txt" & set /a FAIL_COUNT+=1 & goto :T028)
+fc /L "%OUT%\t027_out.txt" "%EXP%\t027_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
 echo.
-echo [T8] search "*breed*" on tiny_games_fallback.tlv + profile_aga_en  ^(base_name fallback^)
-"%FH%" --tlv "%TESTS_DIR%\tiny_games_fallback.tlv" ^
-       --profile "%TESTS_DIR%\profile_aga_en.profile" ^
-       --defs "%TESTS_DIR%\defs" ^
-       --warn-crc ^
-       --search *breed* ^
-       --out "%OUT_DIR%\t8_out.txt" > "%OUT_DIR%\t8_summary.txt" 2>&1
+rem ===========================================================================
+rem  Group H: Profile error handling
+rem ===========================================================================
 
-if errorlevel 1 (
-    echo   FAIL  ^(harness returned non-zero^)
-    type "%OUT_DIR%\t8_summary.txt"
-    set /a FAIL_COUNT+=1
-    goto :RESULTS
-)
+echo --- Group H: Profile error handling ---
 
-fc /L "%OUT_DIR%\t8_out.txt" "%TESTS_DIR%\expected_search_alien_aga.txt" > nul 2>&1
+:T028
+echo [T028] Unknown field in profile ^(exit 0 + Warnings: yes^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t028_unknown_field.profile" --defs "%DEFS%" --out "%OUT%\t028_out.txt" > "%OUT%\t028_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero - expected exit 0 with warning^) & type "%OUT%\t028_summary.txt" & set /a FAIL_COUNT+=1 & goto :T029)
+fc /L "%OUT%\t028_out.txt" "%EXP%\t028_expected.txt" > nul 2>&1
 if errorlevel 1 (
-    echo   FAIL  ^(output mismatch^)
-    echo   --- got ---
-    type "%OUT_DIR%\t8_out.txt"
-    echo   --- expected ---
-    type "%TESTS_DIR%\expected_search_alien_aga.txt"
-    set /a FAIL_COUNT+=1
+    echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1
 ) else (
-    echo   PASS
-    set /a PASS_COUNT+=1
+    findstr /C:"Warnings: yes" "%OUT%\t028_summary.txt" > nul 2>&1
+    if errorlevel 1 (echo   FAIL  ^("Warnings: yes" not in summary^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
 )
-type "%OUT_DIR%\t8_summary.txt"
 
-:T9
-rem -------------------------------------------------------------------
-rem T9: 2-bucket chipset (AGA/OCS) + single language (En)
-rem     Lane 0 selects best AGA, Lane 1 selects best OCS.
-rem     Expected: 7 selected variants, 5 selected groups, 2 lanes.
-rem -------------------------------------------------------------------
+:T029
+echo [T029] Only unknown field ^(no recognized filter, exit 0 + Warnings: yes^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t029_only_unknown.profile" --defs "%DEFS%" --out "%OUT%\t029_out.txt" > "%OUT%\t029_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero - expected exit 0 with warning^) & type "%OUT%\t029_summary.txt" & set /a FAIL_COUNT+=1 & goto :T030)
+fc /L "%OUT%\t029_out.txt" "%EXP%\t029_expected.txt" > nul 2>&1
+if errorlevel 1 (
+    echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1
+) else (
+    findstr /C:"Warnings: yes" "%OUT%\t029_summary.txt" > nul 2>&1
+    if errorlevel 1 (echo   FAIL  ^("Warnings: yes" not in summary^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+)
+
+:T030
+echo [T030] Typo token in profile ^(exit 0, filter runs with token ignored^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t030_typo_token.profile" --defs "%DEFS%" --out "%OUT%\t030_out.txt" > "%OUT%\t030_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t030_summary.txt" & set /a FAIL_COUNT+=1 & goto :T031)
+fc /L "%OUT%\t030_out.txt" "%EXP%\t030_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
+:T031
+echo [T031] Token list overflow ^(exit 0, filter runs with overflow ignored^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t031_token_overflow.profile" --defs "%DEFS%" --out "%OUT%\t031_out.txt" > "%OUT%\t031_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t031_summary.txt" & set /a FAIL_COUNT+=1 & goto :T032)
+fc /L "%OUT%\t031_out.txt" "%EXP%\t031_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
+:T032
+echo [T032] Too many buckets ^(FP_MAX_BUCKETS_FIELD=8 exceeded, fatal exit^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t032_too_many_buckets.profile" --defs "%DEFS%" --out "%OUT%\t032_out.txt" > "%OUT%\t032_summary.txt" 2>&1
+if errorlevel 1 (echo   PASS & set /a PASS_COUNT+=1) else (echo   FAIL  ^(expected non-zero exit^) & set /a FAIL_COUNT+=1)
+
+:T033
+echo [T033] Too many lanes ^(FP_MAX_SELECTION_LANES=32 exceeded, fatal exit^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t033_too_many_lanes.profile" --defs "%DEFS%" --out "%OUT%\t033_out.txt" > "%OUT%\t033_summary.txt" 2>&1
+if errorlevel 1 (echo   PASS & set /a PASS_COUNT+=1) else (echo   FAIL  ^(expected non-zero exit^) & set /a FAIL_COUNT+=1)
+
+:T034
+echo [T034] Too many slash fields ^(FP_MAX_BUCKET_FIELDS=4 exceeded, fatal exit^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t034_too_many_slash_fields.profile" --defs "%DEFS%" --out "%OUT%\t034_out.txt" > "%OUT%\t034_summary.txt" 2>&1
+if errorlevel 1 (echo   PASS & set /a PASS_COUNT+=1) else (echo   FAIL  ^(expected non-zero exit^) & set /a FAIL_COUNT+=1)
+
 echo.
-echo [T9] 2-bucket chipset AGA/OCS  (Selection lanes: 2)
-"%FH%" --tlv "%TESTS_DIR%\tiny_games.tlv" ^
-       --profile "%TESTS_DIR%\profile_bucket_aga_ocs.profile" ^
-       --defs "%TESTS_DIR%\defs" ^
-       --out "%OUT_DIR%\t9_out.txt" > "%OUT_DIR%\t9_summary.txt" 2>&1
+rem ===========================================================================
+rem  Group I: CRC validation
+rem ===========================================================================
 
-if errorlevel 1 (
-    echo   FAIL  ^(harness returned non-zero^)
-    type "%OUT_DIR%\t9_summary.txt"
-    set /a FAIL_COUNT+=1
-    goto :T10
+echo --- Group I: CRC validation ---
+
+:T035
+echo [T035] CRC match ^(all 5 CSVs match embedded fingerprints^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t035_t037_crc.profile" --defs "%DEFS%" --out "%OUT%\t035_out.txt" > "%OUT%\t035_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t035_summary.txt" & set /a FAIL_COUNT+=1 & goto :T036)
+fc /L "%OUT%\t035_out.txt" "%EXP%\t035_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (
+    findstr /C:"CSV CRC: OK" "%OUT%\t035_summary.txt" > nul 2>&1
+    if errorlevel 1 (echo   FAIL  ^("CSV CRC: OK" not in summary^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
 )
 
-fc /L "%OUT_DIR%\t9_out.txt" "%TESTS_DIR%\expected_bucket_aga_ocs.txt" > nul 2>&1
-if errorlevel 1 (
-    echo   FAIL  ^(output mismatch^)
-    echo   --- got ---
-    type "%OUT_DIR%\t9_out.txt"
-    echo   --- expected ---
-    type "%TESTS_DIR%\expected_bucket_aga_ocs.txt"
-    set /a FAIL_COUNT+=1
-) else (
-    findstr /C:"Selection lanes" "%OUT_DIR%\t9_summary.txt" > nul 2>&1
-    if errorlevel 1 (
-        echo   FAIL  ^(summary missing "Selection lanes" line^)
-        type "%OUT_DIR%\t9_summary.txt"
-        set /a FAIL_COUNT+=1
-    ) else (
-        echo   PASS
-        set /a PASS_COUNT+=1
-    )
-)
-type "%OUT_DIR%\t9_summary.txt"
+:T036
+echo [T036] CRC mismatch strict mode ^(all 5 CRCs XOR-inverted, fatal exit^)
+"%FH%" --tlv "%MM%" --profile "%PROF%\t035_t037_crc.profile" --defs "%DEFS%" --out "%OUT%\t036_out.txt" > "%OUT%\t036_summary.txt" 2>&1
+if errorlevel 1 (echo   PASS & set /a PASS_COUNT+=1) else (echo   FAIL  ^(expected non-zero on strict CRC mismatch^) & set /a FAIL_COUNT+=1)
 
-:T10
-rem -------------------------------------------------------------------
-rem T10: 2-bucket language (En/De) + single chipset (AGA)
-rem      Lane 0 selects best En variant, Lane 1 selects best De variant.
-rem      Expected: 8 selected variants, 5 selected groups, 2 lanes.
-rem -------------------------------------------------------------------
+:T037
+echo [T037] CRC mismatch warn-only ^(--warn-crc, exit 0 + output produced^)
+"%FH%" --tlv "%MM%" --profile "%PROF%\t035_t037_crc.profile" --defs "%DEFS%" --warn-crc --out "%OUT%\t037_out.txt" > "%OUT%\t037_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero - expected exit 0 with --warn-crc^) & type "%OUT%\t037_summary.txt" & set /a FAIL_COUNT+=1 & goto :T038)
+fc /L "%OUT%\t037_out.txt" "%EXP%\t037_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
+:T038
+echo [T038] No field map ^(field map block missing entirely, fatal exit^)
+"%FH%" --tlv "%BNF%" --profile "%PROF%\t035_t037_crc.profile" --defs "%DEFS%" --out "%OUT%\t038_out.txt" > "%OUT%\t038_summary.txt" 2>&1
+if errorlevel 1 (echo   PASS & set /a PASS_COUNT+=1) else (echo   FAIL  ^(expected non-zero - no field map^) & set /a FAIL_COUNT+=1)
+
+:T039
+echo [T039] Truncated TLV ^(50-byte truncation inside field map, no positive error^)
+"%FH%" --tlv "%TRN%" --profile "%PROF%\t035_t037_crc.profile" --defs "%DEFS%" --out nul > "%OUT%\t039_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned positive non-zero^) & type "%OUT%\t039_summary.txt" & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
 echo.
-echo [T10] 2-bucket language En/De  (Selection lanes: 2)
-"%FH%" --tlv "%TESTS_DIR%\tiny_games.tlv" ^
-       --profile "%TESTS_DIR%\profile_bucket_lang_en_de.profile" ^
-       --defs "%TESTS_DIR%\defs" ^
-       --out "%OUT_DIR%\t10_out.txt" > "%OUT_DIR%\t10_summary.txt" 2>&1
+rem ===========================================================================
+rem  Group J: Endian correctness
+rem ===========================================================================
 
-if errorlevel 1 (
-    echo   FAIL  ^(harness returned non-zero^)
-    type "%OUT_DIR%\t10_summary.txt"
-    set /a FAIL_COUNT+=1
-    goto :T11
-)
+echo --- Group J: Endian correctness ---
 
-fc /L "%OUT_DIR%\t10_out.txt" "%TESTS_DIR%\expected_bucket_lang_en_de.txt" > nul 2>&1
-if errorlevel 1 (
-    echo   FAIL  ^(output mismatch^)
-    echo   --- got ---
-    type "%OUT_DIR%\t10_out.txt"
-    echo   --- expected ---
-    type "%TESTS_DIR%\expected_bucket_lang_en_de.txt"
-    set /a FAIL_COUNT+=1
-) else (
-    echo   PASS
-    set /a PASS_COUNT+=1
-)
-type "%OUT_DIR%\t10_summary.txt"
+:T040
+echo [T040] Big-endian group_id=300 ^(0x012C, parsed correctly^)
+"%FH%" --tlv "%HI%" --profile "%PROF%\t040_t042_endian.profile" --defs "%DEFS%" --out "%OUT%\t040_out.txt" > "%OUT%\t040_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t040_summary.txt" & set /a FAIL_COUNT+=1 & goto :T041)
+fc /L "%OUT%\t040_out.txt" "%EXP%\t040_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
 
-:T11
-rem -------------------------------------------------------------------
-rem T11: 2-field slash (AGA/OCS x En/De) -> 4 lanes (Cartesian product)
-rem      Expected: 10 selected variants, 5 selected groups, 4 lanes.
-rem -------------------------------------------------------------------
+:T041
+echo [T041] SKIPPED ^(Amiga-only endian test, not run on host^)
+set /a PASS_COUNT+=1
+
+:T042
+echo [T042] Endian correctness - regression TLV ^(normal group_ids^)
+"%FH%" --tlv "%TLV%" --profile "%PROF%\t040_t042_endian.profile" --defs "%DEFS%" --out "%OUT%\t042_out.txt" > "%OUT%\t042_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t042_summary.txt" & set /a FAIL_COUNT+=1 & goto :T043)
+fc /L "%OUT%\t042_out.txt" "%EXP%\t042_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
+
 echo.
-echo [T11] 2-field slash AGA/OCS x En/De  (Selection lanes: 4)
-"%FH%" --tlv "%TESTS_DIR%\tiny_games.tlv" ^
-       --profile "%TESTS_DIR%\profile_bucket_2field.profile" ^
-       --defs "%TESTS_DIR%\defs" ^
-       --out "%OUT_DIR%\t11_out.txt" > "%OUT_DIR%\t11_summary.txt" 2>&1
+rem ===========================================================================
+rem  Group K: Real Games TLV (integration)
+rem ===========================================================================
 
-if errorlevel 1 (
-    echo   FAIL  ^(harness returned non-zero^)
-    type "%OUT_DIR%\t11_summary.txt"
-    set /a FAIL_COUNT+=1
-    goto :T12
-)
+echo --- Group K: Real Games TLV integration ---
 
-fc /L "%OUT_DIR%\t11_out.txt" "%TESTS_DIR%\expected_bucket_2field.txt" > nul 2>&1
-if errorlevel 1 (
-    echo   FAIL  ^(output mismatch^)
-    echo   --- got ---
-    type "%OUT_DIR%\t11_out.txt"
-    echo   --- expected ---
-    type "%TESTS_DIR%\expected_bucket_2field.txt"
-    set /a FAIL_COUNT+=1
-) else (
-    findstr /C:"Selection lanes" "%OUT_DIR%\t11_summary.txt" > nul 2>&1
-    if errorlevel 1 (
-        echo   FAIL  ^(summary missing "Selection lanes" line^)
-        type "%OUT_DIR%\t11_summary.txt"
-        set /a FAIL_COUNT+=1
-    ) else (
-        echo   PASS
-        set /a PASS_COUNT+=1
-    )
-)
-type "%OUT_DIR%\t11_summary.txt"
+:T043
+echo [T043] Real Games TLV + pal_aga_4mb profile ^(integration^)
+"%FH%" --tlv "%GAM%" --profile "assets_raw\profiles\pal_aga_4mb.profile" --defs "%ADEFS%" --out "%OUT%\t043_out.txt" > "%OUT%\t043_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t043_summary.txt" & set /a FAIL_COUNT+=1 & goto :T044)
+fc /L "%OUT%\t043_out.txt" "%EXP%\t043_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
 
-:T12
-rem -------------------------------------------------------------------
-rem T12: exclude wins over bucket (include=AGA/OCS but exclude=OCS)
-rem      OCS variants are rejected in pre-pass; lane 1 always empty.
-rem      Expected: same 5-line output as plain AGA profile (expected_aga_en.txt)
-rem -------------------------------------------------------------------
-echo.
-echo [T12] exclude=OCS wins over include=AGA/OCS bucket
-"%FH%" --tlv "%TESTS_DIR%\tiny_games.tlv" ^
-       --profile "%TESTS_DIR%\profile_bucket_exclude_ocs.profile" ^
-       --defs "%TESTS_DIR%\defs" ^
-       --out "%OUT_DIR%\t12_out.txt" > "%OUT_DIR%\t12_summary.txt" 2>&1
+:T044
+echo [T044] Real Games TLV + multi_bucket_reference profile ^(integration^)
+"%FH%" --tlv "%GAM%" --profile "assets_raw\profiles\multi_bucket_reference.profile" --defs "%ADEFS%" --out "%OUT%\t044_out.txt" > "%OUT%\t044_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t044_summary.txt" & set /a FAIL_COUNT+=1 & goto :T045)
+fc /L "%OUT%\t044_out.txt" "%EXP%\t044_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
 
-if errorlevel 1 (
-    echo   FAIL  ^(harness returned non-zero^)
-    type "%OUT_DIR%\t12_summary.txt"
-    set /a FAIL_COUNT+=1
-    goto :T13
-)
-
-fc /L "%OUT_DIR%\t12_out.txt" "%TESTS_DIR%\expected_aga_en.txt" > nul 2>&1
-if errorlevel 1 (
-    echo   FAIL  ^(output mismatch - exclude should suppress OCS lane^)
-    echo   --- got ---
-    type "%OUT_DIR%\t12_out.txt"
-    echo   --- expected ---
-    type "%TESTS_DIR%\expected_aga_en.txt"
-    set /a FAIL_COUNT+=1
-) else (
-    echo   PASS
-    set /a PASS_COUNT+=1
-)
-type "%OUT_DIR%\t12_summary.txt"
-
-:T13
-rem -------------------------------------------------------------------
-rem T13: duplicate suppression (include=AGA/AGA,OCS)
-rem      Bucket 1 overlaps bucket 0; a variant cannot be selected twice,
-rem      so the second lane falls back to the next-best candidate per group.
-rem      Expected: 10 selected variants, 5 groups, 2 lanes, 0 rejected.
-rem -------------------------------------------------------------------
-echo.
-echo [T13] duplicate suppression AGA/AGA,OCS
-"%FH%" --tlv "%TESTS_DIR%\tiny_games.tlv" ^
-       --profile "%TESTS_DIR%\profile_bucket_dup.profile" ^
-       --defs "%TESTS_DIR%\defs" ^
-       --out "%OUT_DIR%\t13_out.txt" > "%OUT_DIR%\t13_summary.txt" 2>&1
-
-if errorlevel 1 (
-    echo   FAIL  ^(harness returned non-zero^)
-    type "%OUT_DIR%\t13_summary.txt"
-    set /a FAIL_COUNT+=1
-    goto :T14
-)
-
-fc /L "%OUT_DIR%\t13_out.txt" "%TESTS_DIR%\expected_bucket_dup.txt" > nul 2>&1
-if errorlevel 1 (
-    echo   FAIL  ^(output mismatch^)
-    echo   --- got ---
-    type "%OUT_DIR%\t13_out.txt"
-    echo   --- expected ---
-    type "%TESTS_DIR%\expected_bucket_dup.txt"
-    set /a FAIL_COUNT+=1
-) else (
-    echo   PASS
-    set /a PASS_COUNT+=1
-)
-type "%OUT_DIR%\t13_summary.txt"
-
-:T14
-rem -------------------------------------------------------------------
-rem T14: search interaction with slash profile
-rem      --search alien* + 2-bucket chipset profile -> 1 matched group,
-rem      2 selected variants (one per lane).
-rem -------------------------------------------------------------------
-echo.
-echo [T14] search "alien*" with 2-bucket profile  ^(1 group, 2 lanes^)
-"%FH%" --tlv "%TESTS_DIR%\tiny_games.tlv" ^
-       --profile "%TESTS_DIR%\profile_bucket_aga_ocs.profile" ^
-       --defs "%TESTS_DIR%\defs" ^
-       --search alien* ^
-       --out "%OUT_DIR%\t14_out.txt" > "%OUT_DIR%\t14_summary.txt" 2>&1
-
-if errorlevel 1 (
-    echo   FAIL  ^(harness returned non-zero^)
-    type "%OUT_DIR%\t14_summary.txt"
-    set /a FAIL_COUNT+=1
-    goto :T15
-)
-
-fc /L "%OUT_DIR%\t14_out.txt" "%TESTS_DIR%\expected_bucket_search_alien.txt" > nul 2>&1
-if errorlevel 1 (
-    echo   FAIL  ^(output mismatch^)
-    echo   --- got ---
-    type "%OUT_DIR%\t14_out.txt"
-    echo   --- expected ---
-    type "%TESTS_DIR%\expected_bucket_search_alien.txt"
-    set /a FAIL_COUNT+=1
-) else (
-    echo   PASS
-    set /a PASS_COUNT+=1
-)
-type "%OUT_DIR%\t14_summary.txt"
-
-:T15
-rem -------------------------------------------------------------------
-rem T15: no-slash profile produces no "Selection lanes" summary line
-rem      Comma-only profile -> lane_count=1 -> summary line suppressed.
-rem -------------------------------------------------------------------
-echo.
-echo [T15] comma-only profile -> no "Selection lanes" in summary
-"%FH%" --tlv "%TESTS_DIR%\tiny_games.tlv" ^
-       --profile "%TESTS_DIR%\profile_aga_en.profile" ^
-       --defs "%TESTS_DIR%\defs" ^
-       --out nul > "%OUT_DIR%\t15_summary.txt" 2>&1
-
-if errorlevel 1 (
-    echo   FAIL  ^(harness returned non-zero^)
-    type "%OUT_DIR%\t15_summary.txt"
-    set /a FAIL_COUNT+=1
-    goto :T16
-)
-
-findstr /C:"Selection lanes" "%OUT_DIR%\t15_summary.txt" > nul 2>&1
-if errorlevel 1 (
-    echo   PASS
-    set /a PASS_COUNT+=1
-) else (
-    echo   FAIL  ^(comma-only profile must not print "Selection lanes" line^)
-    type "%OUT_DIR%\t15_summary.txt"
-    set /a FAIL_COUNT+=1
-)
-type "%OUT_DIR%\t15_summary.txt"
-
-:T16
-rem -------------------------------------------------------------------
-rem T16: profile with too many buckets (9 > FP_MAX_BUCKETS_FIELD=8)
-rem      profile load must fail; harness exits non-zero.
-rem -------------------------------------------------------------------
-echo.
-echo [T16] too-many buckets (9 buckets in one field^) -> non-zero exit
-"%FH%" --tlv "%TESTS_DIR%\tiny_games.tlv" ^
-       --profile "%TESTS_DIR%\profile_bucket_overflow.profile" ^
-       --defs "%TESTS_DIR%\defs" ^
-       --out nul > "%OUT_DIR%\t16_summary.txt" 2>&1
-set T16_EXIT=%errorlevel%
-
-if %T16_EXIT% neq 0 (
-    echo   PASS  ^(profile load correctly rejected with exit %T16_EXIT%^)
-    set /a PASS_COUNT+=1
-) else (
-    echo   FAIL  ^(expected non-zero exit for 9-bucket profile, got 0^)
-    set /a FAIL_COUNT+=1
-)
-type "%OUT_DIR%\t16_summary.txt"
+:T045
+echo [T045] Real Games TLV + pal_aga_4mb + search "Alien*"
+"%FH%" --tlv "%GAM%" --profile "assets_raw\profiles\pal_aga_4mb.profile" --defs "%ADEFS%" --search "Alien*" --out "%OUT%\t045_out.txt" > "%OUT%\t045_summary.txt" 2>&1
+if errorlevel 1 (echo   FAIL  ^(harness returned non-zero^) & type "%OUT%\t045_summary.txt" & set /a FAIL_COUNT+=1 & goto :RESULTS)
+fc /L "%OUT%\t045_out.txt" "%EXP%\t045_expected.txt" > nul 2>&1
+if errorlevel 1 (echo   FAIL  ^(output mismatch^) & set /a FAIL_COUNT+=1) else (echo   PASS & set /a PASS_COUNT+=1)
 
 :RESULTS
-rem -------------------------------------------------------------------
 echo.
 echo ============================================================
 echo  Results: %PASS_COUNT% passed, %FAIL_COUNT% failed

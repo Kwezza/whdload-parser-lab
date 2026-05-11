@@ -1,0 +1,10 @@
+CSV CRC: OK  (5 files checked)
+TLV     : tests\filtering\tlv\tiny_regression_games.tlv
+Profile : tests\filtering\profiles\t007_exclude_zero_weight.profile
+Variants: 44
+Groups  : 22
+Selected variants : 15
+Selected groups   : 15
+Variants rejected: 26
+Groups rejected  : 7
+Output  : build\host\t007_out.txt

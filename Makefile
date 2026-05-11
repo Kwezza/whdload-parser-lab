@@ -16,6 +16,7 @@ ifeq ($(TARGET),amiga)
 	BUILD_DIR := build/amiga
 	BIN := $(BUILD_DIR)/dat_to_tlv
 	BIN_FH := $(BUILD_DIR)/filter_harness
+	BIN_TC := $(BUILD_DIR)/txcmp
 	RUN_CMD = @echo Amiga binary built: $(subst /,\,$(BIN))
 else
 	CC := gcc
@@ -24,6 +25,7 @@ else
 	BUILD_DIR := build/host
 	BIN := $(BUILD_DIR)/dat_to_tlv.exe
 	BIN_FH := $(BUILD_DIR)/filter_harness.exe
+	BIN_TC := $(BUILD_DIR)/txcmp.exe
 	RUN_CMD = $(subst /,\,$(BIN))
 endif
 
@@ -79,7 +81,11 @@ OBJ_FH := $(SRC_FH:%.c=$(BUILD_DIR)/%.o)
 SRC_GF := tools/gen_fixture_tlv/gen_fixture_tlv.c
 BIN_GF  := $(BUILD_DIR)/gen_fixture_tlv.exe
 
-.PHONY: all clean run help host amiga filter_harness gen_fixture_tlv gen_fixtures test_filter
+# Text comparison utility (host and Amiga)
+SRC_TC := tools/txcmp/txcmp.c
+OBJ_TC := $(SRC_TC:%.c=$(BUILD_DIR)/%.o)
+
+.PHONY: all clean run help host amiga filter_harness gen_fixture_tlv gen_fixtures test_filter txcmp amiga_test_bins
 
 all: $(BIN)
 
@@ -95,6 +101,16 @@ $(BIN_FH): $(OBJ_FH)
 	@$(call MKDIR_CMD,$(BUILD_DIR))
 	$(CC) $(CFLAGS) -o $@ $(OBJ_FH) $(LDFLAGS)
 
+txcmp: $(BIN_TC)
+
+$(BIN_TC): $(OBJ_TC)
+	@$(call MKDIR_CMD,$(BUILD_DIR)/tools/txcmp)
+	$(CC) $(CFLAGS) -o $@ $(OBJ_TC) $(LDFLAGS)
+
+amiga_test_bins:
+	$(MAKE) TARGET=amiga filter_harness
+	$(MAKE) TARGET=amiga txcmp
+
 help:
 	@echo dat_to_tlv standalone build targets
 	@echo.
@@ -105,8 +121,10 @@ help:
 	@echo   make amiga           - Shortcut for Amiga build
 	@echo   make run             - Run host binary when TARGET=host
 	@echo   make filter_harness  - Build filter_harness binary
+	@echo   make txcmp           - Build txcmp text comparison utility
+	@echo   make amiga_test_bins - Build filter_harness + txcmp for Amiga ^(TARGET=amiga^)
 	@echo   make gen_fixture_tlv - Build the fixture TLV generator
-	@echo   make gen_fixtures    - Build generator and emit tests\filtering TLV files
+	@echo   make gen_fixtures    - Build generator and emit TLV files to tests\filtering\tlv\
 	@echo   make test_filter     - Run regression tests against fixture TLVs
 	@echo   make clean           - Remove build output for current TARGET and default TLV output
 	@echo.
@@ -133,7 +151,8 @@ $(BIN_GF): $(SRC_GF)
 gen_fixture_tlv: $(BIN_GF)
 
 gen_fixtures: $(BIN_GF)
-	$(subst /,\,$(BIN_GF))
+	@$(call MKDIR_CMD,tests\filtering\tlv)
+	$(subst /,\,$(BIN_GF)) --out-dir tests\filtering\tlv
 
 test_filter: $(BIN_FH) gen_fixtures
 	tests\filtering\run_tests.bat $(subst /,\,$(BIN_FH))

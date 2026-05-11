@@ -1,0 +1,10 @@
+CSV CRC: OK  (5 files checked)
+TLV     : tests\filtering\tlv\tiny_regression_games.tlv
+Profile : tests\filtering\profiles\t006_cd32_excluded.profile
+Variants: 44
+Groups  : 22
+Selected variants : 21
+Selected groups   : 21
+Variants rejected: 1
+Groups rejected  : 1
+Output  : tests\filtering\expected\t006_out.txt

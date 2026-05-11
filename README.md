@@ -158,6 +158,31 @@ If you want to understand the current converter end-to-end, these are the key pi
 8. `src/platform/*` and `src/io/writeLog.c`
 	Provide the filesystem, string, and logging support that makes the same logic run on both host and Amiga targets.
 
+## Which Code Is Responsible For TLV Filtering
+
+The filtering system reads a finished TLV file, reconstructs the field registry from the embedded metadata map, builds an in-memory variant index, and applies profile-based scoring to rank or select variants. It operates entirely on the output of the TLV creation step and has no dependency on the DAT file.
+
+All of these modules are present in the repository. None of them are compiled by the current `Makefile`. To use them they must be added to your build.
+
+The pieces in order:
+
+1. `src_raw/variant_iterator.c`
+	Walks the flat TLV entry array and detects the boundaries between individual variant records. Each variant starts with a `display_name` entry and is followed by its associated field entries. The iterator exposes one variant at a time without allocating an index.
+2. `src_raw/variant_index.c`
+	Builds the in-memory `TLV_VariantIndex` from a loaded `TLV_Record`. It calls the iterator internally and for each variant creates a `TLV_VariantDescriptor` that caches the display name, a normalized base name with version suffixes stripped, pre-computed FNV-1a hashes of both names, and up to 16 captured field tokens. The index is the primary data structure used by all downstream filter operations.
+3. `src_raw/active_set.c`
+	Maintains a bitset over the variant index. All variants start active. Filter operations deactivate variants that do not match criteria. The active set can be queried as a dense list of active indices, rebuilt on demand after each filter pass.
+4. `src_raw/filter_profile.c`
+	Builds a `FilterProfile` from named include/exclude token lists and per-field weights. The profile assigns a score to each active variant by comparing its captured tokens against the include/exclude lists. Variants whose tokens appear on an exclude list are rejected and removed from the active set.
+5. `src_raw/filter_pipeline.c`
+	The top-level orchestration layer. `filter_pipeline_build` calls `variant_index_build` and `active_set_init`. `filter_pipeline_apply_profile` runs the scoring pass. `filter_pipeline_get_sorted` returns a dense array of variant indices in descending score order. `filter_pipeline_apply_field_filter` applies structural include/exclude filtering on a named field. `filter_pipeline_apply_search` runs a substring search over active variant display names.
+6. `src_raw/filter_runtime.c`
+	A convenience facade that owns a `FieldRegistry`, `GlobalCSVManager`, and `FilterProfile` in one struct. `filter_runtime_init` loads the registry and CSVs. `filter_runtime_build_profile` accepts chipset, language, and memory constraints as comma-separated token strings and builds the scoring profile. `filter_runtime_load_snapshot` opens a TLV file, reads the embedded metadata map to reconstruct field IDs, and calls `variant_index_build`. `filter_runtime_score_all` runs the profile scoring pass and returns the count of active variants.
+7. `src_raw/profile_loader.c`
+	Loads profile definitions from files in `assets_raw/profiles/`. Profiles are named preference sets that pre-configure the include/exclude lists for common Amiga hardware targets such as AGA-only or legacy OCS/ECS.
+
+Headers for all of these are in `include_raw/filter/`.
+
 ## Build
 
 The Makefile uses `cmd` as its shell. Do not use PowerShell inside the Makefile rules.
@@ -239,9 +264,9 @@ STACK 100000
 ## Current Scope And Status
 
 - The current shipped build is focused on DAT-to-TLV conversion.
-- The repo already contains staged support code for variant grouping, filtering, and scoring, but that selector stack is not wired into the current build target yet.
+- The filtering and scoring stack (`variant_iterator.c`, `variant_index.c`, `active_set.c`, `filter_profile.c`, `filter_pipeline.c`, `filter_runtime.c`, `profile_loader.c`) is complete and present in `src_raw/` but is not wired into the current `Makefile` build target.
 - Host builds work. The Amiga binary is known to crash at runtime and still needs investigation.
-- The runtime field registry is dynamic, so TLV files embed metadata that lets field IDs be reconstructed later.
+- The runtime field registry is dynamic, so TLV files embed a metadata map (block `0x01`) that lets field IDs be reconstructed later without reprocessing the original DAT.
 
 ## Expected Summary Output
 

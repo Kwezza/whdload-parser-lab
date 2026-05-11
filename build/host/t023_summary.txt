@@ -1,0 +1,11 @@
+CSV CRC: OK  (5 files checked)
+TLV     : tests\filtering\tlv\tiny_regression_games.tlv
+Profile : tests\filtering\profiles\t023_bucket_missing.profile
+Variants: 44
+Groups  : 22
+Selected variants : 35
+Selected groups   : 21
+Selection lanes   : 2
+Variants rejected: 0
+Groups rejected  : 0
+Output  : build\host\t023_out.txt

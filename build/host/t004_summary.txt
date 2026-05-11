@@ -1,0 +1,10 @@
+CSV CRC: OK  (5 files checked)
+TLV     : tests\filtering\tlv\tiny_regression_games.tlv
+Profile : tests\filtering\profiles\t004_chipset_dominates.profile
+Variants: 44
+Groups  : 22
+Selected variants : 22
+Selected groups   : 22
+Variants rejected: 0
+Groups rejected  : 0
+Output  : build\host\t004_out.txt

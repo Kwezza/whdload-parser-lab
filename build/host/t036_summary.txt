@@ -1,0 +1,2 @@
+CSV CRC: FAILED
+ERROR: CSV CRC mismatch: Chipset  tlv=97D44DF3  current=682BB20C
