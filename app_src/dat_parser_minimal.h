@@ -20,9 +20,8 @@ size_t parse_dat_entries_minimal(const char *dat_path, DatRomEntry **out_entries
 void free_dat_entries_minimal(DatRomEntry *entries, size_t count);
 
 /*------------------------------------------------------------------------*/
-/* Legacy name-only API (kept for compatibility)                           */
-
-size_t parse_dat_filenames_minimal(const char *dat_path, char ***out_names);
-void free_dat_filenames_minimal(char **names, size_t count);
+/* Legacy name-only API (superseded by parse_dat_entries_minimal)         */
+/* Declarations removed in Phase 2 header hygiene (2026-05-11).          */
+/* Definitions retained in dat_parser_minimal.c for compatibility.       */
 
 #endif /* DAT_PARSER_MINIMAL_H */

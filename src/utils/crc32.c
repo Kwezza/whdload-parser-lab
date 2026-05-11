@@ -43,7 +43,7 @@ static void crc32_build_table(void)
 /*------------------------------------------------------------------------*/
 /* Public API */
 
-uint32_t crc32_init(void)
+uint32_t whdtlv_crc32_init(void)
 {
     if (!s_crc32_table_ready) {
         crc32_build_table();
@@ -51,7 +51,7 @@ uint32_t crc32_init(void)
     return 0xFFFFFFFFUL;
 }
 
-uint32_t crc32_update(uint32_t crc, const unsigned char *data, size_t len)
+uint32_t whdtlv_crc32_update(uint32_t crc, const unsigned char *data, size_t len)
 {
     size_t i;
     if (!data) {
@@ -63,7 +63,7 @@ uint32_t crc32_update(uint32_t crc, const unsigned char *data, size_t len)
     return crc;
 }
 
-uint32_t crc32_finalize(uint32_t crc)
+uint32_t whdtlv_crc32_finalize(uint32_t crc)
 {
     return crc ^ 0xFFFFFFFFUL;
 }

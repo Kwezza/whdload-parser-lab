@@ -20,6 +20,7 @@
 #include <tlv_filename/embedded_metadata.h>
 #include <io/pack_types_loader.h>
 #include <io/writeLog.h>
+#include <utils/prettify.h>
 #include <group_util.h>
 #include <string.h>
 #include <stdio.h>
@@ -28,6 +29,11 @@
 #include <dos/dos.h>
 #include <proto/dos.h>
 #endif
+
+/*------------------------------------------------------------------------*/
+/* Static function forward declarations */
+static bool tlv_write_group_map(FILE *file);
+static bool tlv_read_metadata_map(FILE *file, FieldRegistry *field_registry);
 
 /*------------------------------------------------------------------------*/
 /* Constants */
@@ -114,7 +120,7 @@ static uint16_t group_map_get_or_insert(GroupMap *gm, const char *name)
     if (gm->next_id == 0u) {
         fprintf(stderr,
                 "ERROR: group_id overflow: more than 65535 distinct groups.\n");
-        append_to_log("ERROR: group_id overflow: more than 65535 distinct groups.");
+        whdtlv_log_append("ERROR: group_id overflow: more than 65535 distinct groups.");
         return 0u;
     }
 
@@ -285,7 +291,7 @@ static PackFieldMatcher *build_pack_field_matchers(const PackType *pack_info,
     for (index = 0; index < count; index++) {
         const char *field_name = pack_info->field_list[index];
         matchers[index].field_name = field_name;
-        matchers[index].csv_name = get_csv_filename_for_field(field_registry, field_name);
+        matchers[index].csv_name = field_registry_get_csv_basename(field_registry, field_name);
         matchers[index].field_id = field_registry_get_id(field_registry, field_name);
         matchers[index].resolved_cache = NULL;
         matchers[index].generic_csv_match_enabled = pack_field_uses_generic_csv_match(field_name);
@@ -495,7 +501,7 @@ bool tlv_record_add_field_by_name(TLV_Record *record,
 /**
  * @brief Get entry from TLV record by field ID
  */
-const TLV_Entry *tlv_record_get_entry(const TLV_Record *record, uint8_t field_id) {
+static const TLV_Entry *tlv_record_get_entry(const TLV_Record *record, uint8_t field_id) {
     if (!record) {
         return NULL;
     }
@@ -536,7 +542,7 @@ const TLV_Entry *tlv_record_get_field_by_name(const TLV_Record *record,
 /**
  * @brief Write embedded metadata map to TLV file
  */
-bool tlv_write_metadata_map(FILE *file, const FieldRegistry *field_registry) {
+static bool tlv_write_metadata_map(FILE *file, const FieldRegistry *field_registry) {
     if (!file || !field_registry) {
         return false;
     }
@@ -598,7 +604,7 @@ bool tlv_write_metadata_map(FILE *file, const FieldRegistry *field_registry) {
  *     [N bytes: null-terminated csv_name]
  *     [4 bytes: crc32, little-endian]
  */
-bool tlv_write_csv_fingerprints(FILE *file, const GlobalCSVManager *manager)
+static bool tlv_write_csv_fingerprints(FILE *file, const GlobalCSVManager *manager)
 {
     uint32_t i;
     uint16_t payload_size;
@@ -809,7 +815,7 @@ bool tlv_has_metadata_map(FILE *file) {
 /**
  * @brief Read embedded metadata map from TLV file
  */
-bool tlv_read_metadata_map(FILE *file, FieldRegistry *field_registry) {
+static bool tlv_read_metadata_map(FILE *file, FieldRegistry *field_registry) {
     if (!file || !field_registry) {
         return false;
     }
@@ -983,12 +989,24 @@ bool tlv_session_init(const char *csv_folder_path, const char *pack_types_ini_pa
     }
 
     /* Load pack types configuration */
-    session_pack_types = load_pack_types(pack_types_ini_path, &session_pack_count);
+    session_pack_types = whdtlv_load_pack_types(pack_types_ini_path, &session_pack_count);
     if (!session_pack_types) {
         csv_cache_manager_cleanup(&session_csv_manager);
         field_registry_free(session_field_registry);
         session_field_registry = NULL;
         goto done;
+    }
+
+    /* Load name-override CSV for whdtlv_prettify_title (cosmetic: affects unknown-token
+     * pretty-print output only, not the TLV binary). Failure is non-fatal. */
+    {
+        char override_path[512];
+#ifdef _WIN32
+        snprintf(override_path, sizeof(override_path), "%s\\name_overrides.csv", csv_folder_path);
+#else
+        snprintf(override_path, sizeof(override_path), "%s/name_overrides.csv", csv_folder_path);
+#endif
+        whdtlv_prettify_init(override_path); /* non-fatal: returns false if file missing */
     }
 
     session_initialized = true;
@@ -1079,7 +1097,7 @@ bool tlv_session_process_batch(const char **filenames, uint32_t filename_count,
             processing_summary->error_count++;
             /* Log error for debugging */
 #if PLATFORM_AMIGA
-            append_to_log("TLV processing failed for '%s': %s",
+            whdtlv_log_append("TLV processing failed for '%s': %s",
                          filenames[i], error.error_message);
 #endif
         }
@@ -1200,7 +1218,7 @@ bool tlv_session_inject_group_ids(TLV_Record *records, uint32_t count)
         raw_name[name_len] = '\0';
 
         /* Derive canonical group name. */
-        derive_group_name(raw_name, derived, GROUP_MAP_NAME_MAX);
+        whdtlv_derive_group_name(raw_name, derived, GROUP_MAP_NAME_MAX);
 
         gid = group_map_get_or_insert(&session_group_map, derived);
         if (gid == 0u) {
@@ -1230,7 +1248,7 @@ bool tlv_session_inject_group_ids(TLV_Record *records, uint32_t count)
  *     [1 byte   : name_len]
  *     [name_len bytes: group_name (no NUL terminator)]
  */
-bool tlv_write_group_map(FILE *file)
+static bool tlv_write_group_map(FILE *file)
 {
     uint8_t  block_type;
     uint16_t payload_size;

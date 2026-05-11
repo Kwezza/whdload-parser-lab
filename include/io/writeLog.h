@@ -21,7 +21,7 @@ extern "C" {
  * @param enabled true to allow logfile writes, false to suppress them
  */
 /*------------------------------------------------------------------------*/
-void set_logging_enabled(bool enabled);
+void whdtlv_log_set_enabled(bool enabled);
 
 /*------------------------------------------------------------------------*/
 /**
@@ -30,14 +30,14 @@ void set_logging_enabled(bool enabled);
  * @return true if logfile writes are enabled, false otherwise
  */
 /*------------------------------------------------------------------------*/
-bool is_logging_enabled(void);
+bool whdtlv_log_is_enabled(void);
 
 /*------------------------------------------------------------------------*/
 /**
  * @brief Initializes the log file by creating a new empty file
  */
 /*------------------------------------------------------------------------*/
-void initialize_logfile(void);
+void whdtlv_log_init(void);
 
 /*------------------------------------------------------------------------*/
 /**
@@ -47,11 +47,11 @@ void initialize_logfile(void);
  * @param ...    Variable arguments
  */
 /*------------------------------------------------------------------------*/
-void append_to_log(const char *format, ...);
+void whdtlv_log_append(const char *format, ...);
 
 /* Convenience macro used throughout codebase for uniform logging */
 #ifndef LOG_PRINTF
-#define LOG_PRINTF(...) append_to_log(__VA_ARGS__)
+#define LOG_PRINTF(...) whdtlv_log_append(__VA_ARGS__)
 #endif
 
 #ifdef __cplusplus

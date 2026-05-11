@@ -282,10 +282,10 @@ static bool heuristic_prettify(const char *raw, char *buffer, size_t buffer_size
  * @param csv_path Path to the name_overrides.csv file
  * @return bool true on success, false on failure
  */
-bool prettify_init(const char *csv_path)
+bool whdtlv_prettify_init(const char *csv_path)
 {
     /* Clear any existing overrides */
-    prettify_shutdown();
+    whdtlv_prettify_shutdown();
 
     /* Load CSV file if path provided */
     if (csv_path) {
@@ -304,7 +304,7 @@ bool prettify_init(const char *csv_path)
  * @param cap Capacity of output buffer
  * @return char* Pointer to buf on success, NULL on failure
  */
-char *prettify_title(const char *raw, char *buf, size_t cap)
+char *whdtlv_prettify_title(const char *raw, char *buf, size_t cap)
 {
     OverrideNode *node;
 
@@ -339,7 +339,7 @@ char *prettify_title(const char *raw, char *buf, size_t cap)
 /**
  * @brief Free all resources used by the prettify system
  */
-void prettify_shutdown(void)
+void whdtlv_prettify_shutdown(void)
 {
     OverrideNode *node;
     OverrideNode *next;

@@ -32,7 +32,7 @@ extern "C" {
 #endif
 
 /*
- * derive_group_name
+ * whdtlv_derive_group_name
  *
  * Writes the canonical group name for display_name into out[0..out_size-1]
  * and NUL-terminates it.  Returns the number of characters written
@@ -44,7 +44,7 @@ extern "C" {
  *
  * No heap allocation is performed.
  */
-unsigned long derive_group_name(const char    *display_name,
+unsigned long whdtlv_derive_group_name(const char    *display_name,
                                 char          *out,
                                 unsigned long  out_size);
 

@@ -136,7 +136,7 @@ uint32_t active_set_filter_by_field(TLV_ActiveSet *set,
 		return set->active_count; /* Unknown field, no filtering */
 	}
 
-	const char *csv_file = get_csv_filename_for_field(registry, field_name);
+	const char *csv_file = field_registry_get_csv_basename(registry, field_name);
 	if (!csv_file) {
 		return set->active_count; /* No CSV file for field */
 	}

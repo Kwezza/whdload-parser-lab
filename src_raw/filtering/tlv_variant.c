@@ -21,7 +21,7 @@
  * stores the raw bytes and lets the scorer decode them.
  *
  * base_name derivation:
- *   Canonical group name derived by derive_group_name() (group_util.h).
+ *   Canonical group name derived by whdtlv_derive_group_name() (group_util.h).
  *   Used for fallback grouping when group_id is not present in the TLV.
  *   When group_id IS present, base_name is still populated but grouping
  *   uses the numeric group_id instead.
@@ -166,13 +166,13 @@ int tlv_variant_build(WhdVariantArray *arr,
                 fn_copy[name_len] = '\0';
                 cur->filename = fn_copy; /* we own this */
 
-                /* base_name — canonical group name via derive_group_name */
+                /* base_name — canonical group name via whdtlv_derive_group_name */
                 {
                     char          derived[128]; /* matches GROUP_MAP_NAME_MAX */
                     unsigned long dlen;
                     char         *base_copy;
 
-                    dlen      = derive_group_name(fn_copy, derived, sizeof(derived));
+                    dlen      = whdtlv_derive_group_name(fn_copy, derived, sizeof(derived));
                     base_copy = (char *)malloc(dlen + 1u);
                     if (!base_copy) {
                         tlv_variant_free(arr);

@@ -7,9 +7,9 @@
  * C89-compatible; suitable for both host and vbcc Amiga builds.
  *
  * Usage:
- *   uint32_t crc = crc32_init();
- *   crc = crc32_update(crc, data, len);
- *   crc = crc32_finalize(crc);
+ *   uint32_t crc = whdtlv_crc32_init();
+ *   crc = whdtlv_crc32_update(crc, data, len);
+ *   crc = whdtlv_crc32_finalize(crc);
  */
 
 #ifndef UTILS_CRC32_H
@@ -24,23 +24,23 @@
 /**
  * @brief Return the initial CRC accumulator value.
  */
-uint32_t crc32_init(void);
+uint32_t whdtlv_crc32_init(void);
 
 /**
  * @brief Feed a block of bytes into the CRC accumulator.
- * @param crc   Current accumulator (from crc32_init or a previous crc32_update).
+ * @param crc   Current accumulator (from whdtlv_crc32_init or a previous whdtlv_crc32_update).
  * @param data  Pointer to the bytes to process.
  * @param len   Number of bytes.
  * @return Updated accumulator.
  */
-uint32_t crc32_update(uint32_t crc, const unsigned char *data, size_t len);
+uint32_t whdtlv_crc32_update(uint32_t crc, const unsigned char *data, size_t len);
 
 /**
  * @brief Finalise the CRC and return the 32-bit digest.
- * @param crc   Accumulator after all crc32_update calls.
+ * @param crc   Accumulator after all whdtlv_crc32_update calls.
  * @return Final CRC-32 value.
  */
-uint32_t crc32_finalize(uint32_t crc);
+uint32_t whdtlv_crc32_finalize(uint32_t crc);
 
 #endif /* UTILS_CRC32_H */
 

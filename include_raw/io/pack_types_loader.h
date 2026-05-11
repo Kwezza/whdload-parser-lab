@@ -57,7 +57,7 @@ typedef struct {
  * @param out_count Pointer to receive number of loaded pack types
  * @return Dynamically allocated array of PackType structures, or NULL on error
  */
-PackType *load_pack_types(const char *ini_path, size_t *out_count);
+PackType *whdtlv_load_pack_types(const char *ini_path, size_t *out_count);
 
 /**
  * @brief Free pack types array
@@ -68,26 +68,11 @@ PackType *load_pack_types(const char *ini_path, size_t *out_count);
  * @param packs Pack types array to free
  * @param count Number of pack types in array
  */
-void free_pack_types(PackType *packs, size_t count);
+void whdtlv_free_pack_types(PackType *packs, size_t count);
 
 /*------------------------------------------------------------------------*/
 /* Validation Helper                                                      */
 /*------------------------------------------------------------------------*/
-
-/**
- * @brief Split string on delimiter with validation
- *
- * Splits a string on the specified delimiter and validates that exactly
- * the expected number of parts are returned. Useful for parsing INI
- * values and CSV data.
- *
- * @param str String to split
- * @param delimiter Delimiter character
- * @param expected_parts Expected number of parts after splitting
- * @param out_parts Pointer to receive allocated array of string parts
- * @return true if successful with correct part count, false otherwise
- */
-bool validate_and_split(const char *str, char delimiter, int expected_parts, char ***out_parts);
 
 /**
  * @brief Trim whitespace from string

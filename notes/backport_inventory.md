@@ -109,6 +109,21 @@ Rationale: Needed for configuration context, but key naming and migration behavi
 - Field registry IDs are assigned at runtime and are not stable across sessions.
 - Data files are runtime dependencies; extraction is not code-only.
 
+## TLV Read-Back Path (Phase 2 decision — 2026-05-11)
+
+Decision: **RETAIN** `tlv_read_record_with_metadata` and `tlv_has_metadata_map` definitions.
+
+Rationale: `src_raw/filter_runtime.c` uses `tlv_read_record_with_metadata` for snapshot
+loading in the staged filter pipeline. Removing the definition would break the staged
+filter build path.
+
+Actions taken:
+- Declarations moved from `include_raw/tlv_filename/tlv_builder.h` to the new internal
+  header `include_raw/tlv_filename/tlv_reader.h`.
+- `tlv_read_metadata_map` made `static` in `tlv_builder.c` (only caller is
+  `tlv_read_record_with_metadata`; no external declaration needed).
+- `filter_runtime.c` now includes `<tlv_filename/tlv_reader.h>`.
+
 ## Canonical Source and Duplicate Notes
 
 - Canonical source for staged profiles is assets/amiga_sys/profiles.

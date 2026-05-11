@@ -88,13 +88,16 @@ gcc -std=c99 -I./include -I./include_raw \
 
 TLV creation is session-based. One session processes one batch of filenames and produces one TLV file.
 
+For most callers, the single-call facade is sufficient (see §1.5). The session API below is for
+advanced callers that need per-record access.
+
 ```
-tlv_session_init()
-  -> tlv_session_process_batch()
-  -> tlv_session_inject_group_ids()   (optional, adds group clustering)
+whdtlv_session_init()
+  -> whdtlv_session_process_batch()
+  -> whdtlv_session_inject_group_ids()   (optional, adds group clustering)
   -> merge records into aggregate
   -> write TLV file
-tlv_session_finalize()
+whdtlv_session_finalize()
 ```
 
 ### 1.4 Step-by-Step API Calls
@@ -104,7 +107,7 @@ tlv_session_finalize()
 ```c
 #include <tlv_filename/tlv_builder.h>
 
-bool ok = tlv_session_init(
+bool ok = whdtlv_session_init(
     "path/to/defs",          /* folder containing all CSV files */
     "path/to/pack_types.ini" /* pack type configuration */
 );
@@ -128,7 +131,7 @@ uint32_t count = 2;
 TLV_Record *records = calloc(count, sizeof(TLV_Record));
 
 ProcessingSummary summary;
-bool ok = tlv_session_process_batch(
+bool ok = whdtlv_session_process_batch(
     filenames,   /* array of raw archive filenames */
     count,       /* number of filenames */
     1,           /* pack_type_id — matches an id in pack_types.ini (1=Games, 2=Demos, etc.) */
@@ -153,7 +156,7 @@ Each `TLV_Record` in `records` is owned by the caller after this call. You must 
 Group IDs cluster variant records that share the same canonical game title. This is needed if your reader needs to group variants (e.g. all editions of "Lemmings" under one group_id).
 
 ```c
-bool ok = tlv_session_inject_group_ids(records, count);
+bool ok = whdtlv_session_inject_group_ids(records, count);
 /*
  * Returns: true on success.
  *          Appends a group_id TLV entry to each record.
@@ -178,7 +181,7 @@ for (uint32_t i = 0; i < count; i++) {
 FILE *out = fopen("output/MyGames.tlv", "wb");
 /* Writes metadata map (block 0x01), group map (block 0x02),
  * file version (block 0x03), then all variant data records. */
-bool ok = tlv_write_record_with_metadata(out, &aggregate, /* field_registry is internal */);
+bool ok = whdtlv_write_record(out, &aggregate, /* field_registry is internal */);
 fclose(out);
 
 tlv_record_free(&aggregate);
@@ -189,26 +192,37 @@ tlv_record_free(&aggregate);
 #### Step 5 — Finalise
 
 ```c
-tlv_session_finalize();
+whdtlv_session_finalize();
 /* Frees all session-internal resources (registry, CSV caches, group map). */
 ```
 
 ### 1.5 High-Level Convenience Function
 
-For a simple single-DAT conversion without the step-by-step control, use the legacy facade:
+For a simple single-DAT conversion without step-by-step control, use the public facade. Include
+only this one header — no internal pipeline headers are needed:
 
 ```c
-#include <tlv_filename/tlv_builder.h>
+#include <integration/whdtlv_integration.h>
 
-bool ok = build_tlv_from_dat(
+WhdTlvBuildOptions opts;
+WhdTlvBuildSummary summary;
+whdtlv_build_options_defaults(&opts);
+
+int rc = whdtlv_build_from_dat(
     "path/to/input.dat",      /* Logiqx DAT XML file */
     "path/to/defs",           /* CSV definitions folder */
-    "path/to/output.tlv"      /* TLV output path */
+    "path/to/pack_types.ini", /* pack type configuration */
+    "path/to/output.tlv",     /* TLV output path */
+    0,                        /* pack_type_id: 0 = all types */
+    &opts,
+    &summary
 );
 /*
- * Returns: true if the TLV file was written successfully.
- *          false on any unrecoverable error.
- *          Internally runs the full session lifecycle.
+ * Returns: WHDTLV_OK (0) on success, or a WHDTLV_ERR_* code on failure.
+ *
+ * summary.records_written  — number of records written to the TLV file
+ * summary.records_skipped  — number of filenames that produced no record
+ * summary.groups_assigned  — number of group IDs injected
  */
 ```
 
@@ -450,7 +464,7 @@ Because field IDs are assigned dynamically each session, the embedded metadata m
 
 ## Part 4 — Runtime Asset Layout
 
-Your deployed project must provide these files at the paths you pass to `tlv_session_init` and `filter_runtime_init`:
+Your deployed project must provide these files at the paths you pass to `whdtlv_build_from_dat` (or `whdtlv_session_init` for the advanced API) and `filter_runtime_init`:
 
 ```
 defs/

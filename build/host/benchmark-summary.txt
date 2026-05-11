@@ -1,0 +1,204 @@
+DAT input:    assets_raw/Dats/DemB(2026-04-20).dat
+Output TLV:   output/DemB(2026-04-20).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  12
+Processed:    12
+Successful:   12
+Errors:       0
+TLV entries:  52
+TLV build time: 1 ms
+TLV save time: 0 ms
+
+DAT input:    assets_raw/Dats/Demo(2026-03-23).dat
+Output TLV:   output/Demo(2026-03-23).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  904
+Processed:    904
+Successful:   904
+Errors:       0
+TLV entries:  4526
+TLV build time: 2 ms
+TLV save time: 0 ms
+
+DAT input:    assets_raw/Dats/GamB(2026-04-26).dat
+Output TLV:   output/GamB(2026-04-26).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  128
+Processed:    128
+Successful:   128
+Errors:       0
+TLV entries:  582
+TLV build time: 2 ms
+TLV save time: 0 ms
+
+DAT input:    assets_raw/Dats/Game(2026-04-17).dat
+Output TLV:   output/Game(2026-04-17).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  3973
+Processed:    3973
+Successful:   3973
+Errors:       0
+TLV entries:  19917
+TLV build time: 20 ms
+TLV save time: 2 ms
+
+DAT input:    assets_raw/Dats/Mags(2025-07-24).dat
+Output TLV:   output/Mags(2025-07-24).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  104
+Processed:    104
+Successful:   104
+Errors:       0
+TLV entries:  521
+TLV build time: 0 ms
+TLV save time: 0 ms
+
+DAT input:    assets_raw/Dats/DemB(2026-04-20).dat
+Output TLV:   output/DemB(2026-04-20).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  12
+Processed:    12
+Successful:   12
+Errors:       0
+TLV entries:  52
+TLV build time: 1 ms
+TLV save time: 0 ms
+
+DAT input:    assets_raw/Dats/Demo(2026-03-23).dat
+Output TLV:   output/Demo(2026-03-23).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  904
+Processed:    904
+Successful:   904
+Errors:       0
+TLV entries:  4526
+TLV build time: 2 ms
+TLV save time: 0 ms
+
+DAT input:    assets_raw/Dats/GamB(2026-04-26).dat
+Output TLV:   output/GamB(2026-04-26).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  128
+Processed:    128
+Successful:   128
+Errors:       0
+TLV entries:  582
+TLV build time: 2 ms
+TLV save time: 0 ms
+
+DAT input:    assets_raw/Dats/Game(2026-04-17).dat
+Output TLV:   output/Game(2026-04-17).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  3973
+Processed:    3973
+Successful:   3973
+Errors:       0
+TLV entries:  19917
+TLV build time: 19 ms
+TLV save time: 2 ms
+
+DAT input:    assets_raw/Dats/Mags(2025-07-24).dat
+Output TLV:   output/Mags(2025-07-24).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  104
+Processed:    104
+Successful:   104
+Errors:       0
+TLV entries:  521
+TLV build time: 0 ms
+TLV save time: 0 ms
+
+DAT input:    assets_raw/Dats/DemB(2026-04-20).dat
+Output TLV:   output/DemB(2026-04-20).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  12
+Processed:    12
+Successful:   12
+Errors:       0
+TLV entries:  52
+TLV build time: 1 ms
+TLV save time: 0 ms
+
+DAT input:    assets_raw/Dats/Demo(2026-03-23).dat
+Output TLV:   output/Demo(2026-03-23).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  904
+Processed:    904
+Successful:   904
+Errors:       0
+TLV entries:  4526
+TLV build time: 2 ms
+TLV save time: 1 ms
+
+DAT input:    assets_raw/Dats/GamB(2026-04-26).dat
+Output TLV:   output/GamB(2026-04-26).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  128
+Processed:    128
+Successful:   128
+Errors:       0
+TLV entries:  582
+TLV build time: 1 ms
+TLV save time: 0 ms
+
+DAT input:    assets_raw/Dats/Game(2026-04-17).dat
+Output TLV:   output/Game(2026-04-17).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  3973
+Processed:    3973
+Successful:   3973
+Errors:       0
+TLV entries:  19917
+TLV build time: 21 ms
+TLV save time: 2 ms
+
+DAT input:    assets_raw/Dats/Mags(2025-07-24).dat
+Output TLV:   output/Mags(2025-07-24).tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  104
+Processed:    104
+Successful:   104
+Errors:       0
+TLV entries:  521
+TLV build time: 0 ms
+TLV save time: 0 ms
+
+DAT input:    assets_raw/Dats/Game(2026-04-17).dat
+Output TLV:   output/phase4_test.tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  3973
+Processed:    3973
+Successful:   3973
+Errors:       0
+TLV entries:  19917
+TLV build time: 24 ms
+TLV save time: 2 ms
+
+DAT input:    assets_raw/Dats/Game(2026-04-17).dat
+Output TLV:   output/phase4_baseline.tlv
+CSV folder:   assets_raw/defs
+Pack types:   assets_raw/prefs/pack_types.ini
+DAT entries:  3973
+Processed:    3973
+Successful:   3973
+Errors:       0
+TLV entries:  19917
+TLV build time: 24 ms
+TLV save time: 2 ms
+

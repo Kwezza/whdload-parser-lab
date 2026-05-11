@@ -1,0 +1,69 @@
+# Refactor Baselines — Phase 1 (Static-Only Cleanup)
+# Date: 2026-05-11
+# Captured before any Phase 1 changes.
+# Build: make TARGET=host run  (host GCC build, -std=c99 -O2 -Wall -Wextra)
+
+TLV output checksums (MD5) and file sizes:
+
+  DemB(2026-04-20).tlv:     1198 bytes  MD5=4FFAAF1E115E9D01E049063316EF89F4
+  Demo(2026-03-23).tlv:    64441 bytes  MD5=5B716AF32530E9804BB95B0063C4BA4F
+  GamB(2026-04-26).tlv:     8637 bytes  MD5=4AB8DDE1004A89EBADB032280BC3B6AA
+  Game(2026-04-17).tlv:   261573 bytes  MD5=9B17B7CAB03CF784578711C6FAB5B0F3
+  games_no_log_test.tlv:  148139 bytes  MD5=AD14B27665AA8AFAC56B84B7E8E4F1EC
+  magazines_test.tlv:       4925 bytes  MD5=EC6DE89EEB51236776CFF858995A8593
+  Mags(2025-07-24).tlv:    7533 bytes  MD5=255F3A54AB80A468EA3D431A259DEF9E
+
+Record counts (from build run output):
+  DemB(2026-04-20).dat:  12 entries -> 52 TLV entries
+  Demo(2026-03-23).dat: 904 entries -> 4526 TLV entries
+  GamB(2026-04-26).dat: 128 entries -> 582 TLV entries
+  Game(2026-04-17).dat: 3973 entries (processed) -> 19917 TLV entries
+  Mags(2025-07-24).dat: 104 entries -> 521 TLV entries
+
+---
+
+# Phase 1 Result (2026-05-11)
+# Post-change build: make TARGET=host run  (zero warnings, zero errors)
+
+Post-change TLV checksums — all byte-identical to baseline:
+
+  DemB(2026-04-20).tlv:     1198 bytes  MD5=4FFAAF1E115E9D01E049063316EF89F4  MATCH
+  Demo(2026-03-23).tlv:    64441 bytes  MD5=5B716AF32530E9804BB95B0063C4BA4F  MATCH
+  GamB(2026-04-26).tlv:     8637 bytes  MD5=4AB8DDE1004A89EBADB032280BC3B6AA  MATCH
+  Game(2026-04-17).tlv:   261573 bytes  MD5=9B17B7CAB03CF784578711C6FAB5B0F3  MATCH
+  games_no_log_test.tlv:  148139 bytes  MD5=AD14B27665AA8AFAC56B84B7E8E4F1EC  MATCH
+  magazines_test.tlv:       4925 bytes  MD5=EC6DE89EEB51236776CFF858995A8593  MATCH
+  Mags(2025-07-24).tlv:    7533 bytes  MD5=255F3A54AB80A468EA3D431A259DEF9E  MATCH
+
+Deviations from the §4.1 plan (functions found to be dead — no callers at all):
+  These functions were NOT made static because doing so would produce
+  -Wunused-function warnings, violating the zero-warnings requirement.
+  Their declarations were still removed from the headers as planned.
+  Flag for review in a later phase (candidates for removal or activation).
+
+  csv_cache.c:      csv_cache_add_unknown_token
+                    (symbol_inventory.md incorrectly states it is called from
+                     csv_cache_add_unknown_token_ex; the relationship is reversed —
+                     it calls _ex. No caller exists for the non-_ex wrapper.)
+
+  tlv_builder.c:    tlv_record_add_field_by_name
+                    (dead wrapper; no call site found in any live source file)
+
+  filename_processor.c: version_parser_detect_pattern
+                        (no call site found; not even called internally)
+                    contributor_extractor_process
+                        (no call site found; not even called internally)
+                    csv_token_matcher_find_source
+                        (no call site found; not even called internally)
+
+Forward declarations added (static functions called before their definition):
+  csv_cache.c:      csv_direct_file_lookup
+                    csv_cache_manager_init_with_config
+  tlv_builder.c:    tlv_write_group_map
+
+Header note: tlv_write_metadata_map and tlv_write_csv_fingerprints were
+  declared in both include_raw/tlv_filename/tlv_builder.h AND
+  include_raw/tlv_filename/embedded_metadata.h. Both declarations were
+  removed (the plan listed only tlv_builder.h, but the embedded_metadata.h
+  declaration would have caused a conflicting-linkage error after static was
+  applied in tlv_builder.c).

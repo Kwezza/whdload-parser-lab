@@ -105,6 +105,9 @@ Headers for the stable support layer in `src/`.
 - `io/`: declarations for logging.
 - `utils/`: declarations for helper utilities such as name prettification.
 - `tlv_filename/tlv_profile.h`: profiling interfaces shared with the pipeline.
+- `integration/whdtlv_integration.h`: **public facade header**. Normal callers include only
+  this header. It exposes `whdtlv_build_from_dat`, `whdtlv_build_options_defaults`, and the
+  `WhdTlvBuildOptions`/`WhdTlvBuildSummary` structs. No internal types leak through it.
 
 ### `include_raw/`
 
@@ -136,6 +139,32 @@ Project notes, handover documents, and benchmark analysis. This is the best plac
 ### `notes/`
 
 Backport and staging notes. In particular, `backport_inventory.md` explains which extracted files are required for Milestone 1 versus later selector work.
+
+## Embedding the Converter
+
+To call the converter from another project, include only the public facade header:
+
+```c
+#include <integration/whdtlv_integration.h>
+
+WhdTlvBuildOptions opts;
+WhdTlvBuildSummary summary;
+whdtlv_build_options_defaults(&opts);
+
+int rc = whdtlv_build_from_dat(
+    "path/to/input.dat",
+    "path/to/defs",
+    "path/to/pack_types.ini",
+    "path/to/output.tlv",
+    0,       /* pack_type_id: 0 = all types */
+    &opts,
+    &summary
+);
+```
+
+The facade is implemented in `src_raw/whdtlv_integration.c`. No internal headers need to be
+included by the caller. See `TLV_INTEGRATION_GUIDE.md` for the full session API and filtering
+documentation.
 
 ## Which Code Is Responsible For TLV Creation
 

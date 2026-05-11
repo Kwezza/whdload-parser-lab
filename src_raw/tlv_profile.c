@@ -244,12 +244,12 @@ void tlv_profile_log_summary(void)
     unsigned long max_ms_whole;
     unsigned long max_ms_frac;
 
-    if (!is_logging_enabled()) {
+    if (!whdtlv_log_is_enabled()) {
         return;
     }
 
     batch_total_us = g_tlv_profile_counters[TLV_PROFILE_SECTION_BATCH_TOTAL].total_us;
-    append_to_log("TLV pipeline profile (save excluded):");
+    whdtlv_log_append("TLV pipeline profile (save excluded):");
 
     for (index = 0; index < (uint32_t)TLV_PROFILE_SECTION_COUNT; index++) {
         const TLV_ProfileCounter *counter = &g_tlv_profile_counters[index];
@@ -270,7 +270,7 @@ void tlv_profile_log_summary(void)
         max_ms_whole = (unsigned long)(counter->max_us / 1000ULL);
         max_ms_frac = (unsigned long)(counter->max_us % 1000ULL);
 
-        append_to_log("%s calls=%lu total=%lu.%03lu ms avg=%lu.%03lu ms max=%lu.%03lu ms share=%lu.%lu%%",
+        whdtlv_log_append("%s calls=%lu total=%lu.%03lu ms avg=%lu.%03lu ms max=%lu.%03lu ms share=%lu.%lu%%",
                       counter->name,
                       (unsigned long)counter->call_count,
                       total_ms_whole,

@@ -6,6 +6,11 @@
 #include <stdio.h>
 #include <ctype.h>
 
+/* Forward declaration: free_dat_filenames_minimal is defined later in this
+ * file and called from parse_dat_filenames_minimal. Declaration removed from
+ * dat_parser_minimal.h in Phase 2 header hygiene (2026-05-11). */
+void free_dat_filenames_minimal(char **names, size_t count);
+
 #define DAT_LINE_BUFFER_SIZE 4096
 #define DAT_INITIAL_CAPACITY 256
 #define DAT_MAX_FILENAME_LENGTH 1024

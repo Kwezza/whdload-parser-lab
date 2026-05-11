@@ -370,7 +370,7 @@ void filename_processor_print_pack_field_stats(FILE *stream)
 /**
  * @brief Sanitize filename (remove extension, normalize format)
  */
-ProcessingResult filename_sanitizer_process(const char *input,
+static ProcessingResult filename_sanitizer_process(const char *input,
                                           char *output,
                                           ProcessingError *error) {
     if (!input || !output) {
@@ -435,7 +435,7 @@ ProcessingResult version_parser_detect_pattern(const char *token,
 /**
  * @brief Parse version token and extract clean version
  */
-ProcessingResult version_parser_extract(const char *version_token,
+static ProcessingResult version_parser_extract(const char *version_token,
                                        char *clean_version,
                                        ProcessingError *error) {
     if (!version_token || !clean_version) {
@@ -469,7 +469,7 @@ ProcessingResult version_parser_extract(const char *version_token,
 /**
  * @brief Parse language token into bitfield using field registry
  */
-ProcessingResult language_parser_parse_token(const char *language_token,
+static ProcessingResult language_parser_parse_token(const char *language_token,
                                             const FieldRegistry *field_registry,
                                             GlobalCSVManager *csv_manager,
                                             uint16_t *language_bitfield,
@@ -580,12 +580,12 @@ ProcessingResult contributor_extractor_process(const char *filename,
                 tlv_record_add_entry(output_record, contributor_field_id,
                                    (const uint8_t*)&contributor_id, sizeof(contributor_id));
 #if PLATFORM_AMIGA
-                append_to_log("Added contributor '%s' ID %lu to TLV record (field_id=0x%02X)",
+                whdtlv_log_append("Added contributor '%s' ID %lu to TLV record (field_id=0x%02X)",
                              contributor_phrase, (unsigned long)contributor_id, contributor_field_id);
 #endif
             }
 #if PLATFORM_AMIGA
-            append_to_log("Found contributor: %s (ID=%lu)", contributor_phrase, (unsigned long)contributor_id);
+            whdtlv_log_append("Found contributor: %s (ID=%lu)", contributor_phrase, (unsigned long)contributor_id);
 #endif
 
             /* Remove contributor phrase from filename */
@@ -650,9 +650,9 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
 
     /* Targeted debug: list prescan fields for known sample names */
     if (is_debug_filename) {
-    append_to_log("PRESCAN ACTIVE: %lu field(s)", (unsigned long)cfg_count);
+    whdtlv_log_append("PRESCAN ACTIVE: %lu field(s)", (unsigned long)cfg_count);
         for (uint32_t dc = 0; dc < cfg_count; dc++) {
-            append_to_log("  field=%s csv=%s order=%lu multi=%u remove=%u multival=%u",
+            whdtlv_log_append("  field=%s csv=%s order=%lu multi=%u remove=%u multival=%u",
                           cfgs[dc].field_name ? cfgs[dc].field_name : "?",
                           cfgs[dc].csv_base ? cfgs[dc].csv_base : "",
                           (unsigned long)cfgs[dc].order,
@@ -769,7 +769,7 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
                 if (is_debug_filename) {
                     char dbg_joined[MAX_TOKEN_LENGTH];
                     build_joined_token(dbg_joined, sizeof(dbg_joined), parts, i, window);
-                    append_to_log("PRESCAN TRY: field=%s csv=%s window=%lu token='%s' id=%lu",
+                    whdtlv_log_append("PRESCAN TRY: field=%s csv=%s window=%lu token='%s' id=%lu",
                                   cfg->field_name ? cfg->field_name : "?",
                                   cfg->csv_base ? cfg->csv_base : "",
                                   (unsigned long)window,
@@ -787,7 +787,7 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
                     if (is_debug_filename) {
                         char dbg_joined[MAX_TOKEN_LENGTH];
                         build_joined_token(dbg_joined, sizeof(dbg_joined), parts, i, window);
-                        append_to_log("PRESCAN MATCH: field=%s token='%s' id=%lu", cfg->field_name ? cfg->field_name : "?", dbg_joined, (unsigned long)id);
+                        whdtlv_log_append("PRESCAN MATCH: field=%s token='%s' id=%lu", cfg->field_name ? cfg->field_name : "?", dbg_joined, (unsigned long)id);
                     }
                     /* mark that we matched; reserved for Amiga-only logging */
 #if PLATFORM_AMIGA
@@ -813,7 +813,7 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
                         if (is_debug_filename) {
                             char debug_rebuild[MAX_FILENAME_LENGTH];
                             rebuild_filename_from_parts(debug_rebuild, sizeof(debug_rebuild), parts, pc);
-                            append_to_log("PRESCAN STRIP: field=%s result='%s'", cfg->field_name ? cfg->field_name : "?", debug_rebuild);
+                            whdtlv_log_append("PRESCAN STRIP: field=%s result='%s'", cfg->field_name ? cfg->field_name : "?", debug_rebuild);
                         }
                         break;
                     }
@@ -848,7 +848,7 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
 /**
  * @brief Match token against specific CSV using dynamic field registry
  */
-ProcessingResult csv_token_matcher_lookup(const char *token,
+static ProcessingResult csv_token_matcher_lookup(const char *token,
                                         const char *csv_name,
                                         const FieldRegistry *field_registry,
                                         GlobalCSVManager *csv_manager,
@@ -1015,7 +1015,7 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
     }
 
 #if PLATFORM_AMIGA
-    append_to_log("Processing filename: %s", sanitized_filename);
+    whdtlv_log_append("Processing filename: %s", sanitized_filename);
 #endif
 
     /* Step 2: Prescan (generic) with fallback to legacy contributor extractor */
@@ -1060,8 +1060,8 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
     }
 
 #if PLATFORM_AMIGA
-    append_to_log("Program name: %s", tf->program_name);
-    append_to_log("Tokens to process: %lu", (unsigned long)tf->token_count);
+    whdtlv_log_append("Program name: %s", tf->program_name);
+    whdtlv_log_append("Tokens to process: %lu", (unsigned long)tf->token_count);
 #endif
 
     /* Generic prescan already handled multi-token fields like contributors; no legacy pre-pass needed */
@@ -1099,14 +1099,14 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
             processing_error_init(&step_error, "version_parser");
             if (version_parser_extract(token, clean_version, &step_error) == PROCESSING_SUCCESS) {
 #if PLATFORM_AMIGA
-                append_to_log("Found version: %s", clean_version);
+                whdtlv_log_append("Found version: %s", clean_version);
 #endif
                 /* Add version to TLV record */
                 if (version_field_id != 0) {
                     tlv_record_add_entry(output_record, version_field_id,
                                        (const uint8_t*)clean_version, strlen(clean_version));
 #if PLATFORM_AMIGA
-                    append_to_log("Added version '%s' to TLV record (field_id=0x%02X)", clean_version, version_field_id);
+                    whdtlv_log_append("Added version '%s' to TLV record (field_id=0x%02X)", clean_version, version_field_id);
 #endif
                 }
                 token_processed = true;
@@ -1121,14 +1121,14 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
                                            &language_bitfield, &step_error) == PROCESSING_SUCCESS) {
                 if (language_bitfield > 0) {
 #if PLATFORM_AMIGA
-                    append_to_log("Found language bitfield: 0x%04X", language_bitfield);
+                    whdtlv_log_append("Found language bitfield: 0x%04X", language_bitfield);
 #endif
                     /* Add language bitfield to TLV record */
                     if (language_field_id != 0) {
                         tlv_record_add_entry(output_record, language_field_id,
                                            (const uint8_t*)&language_bitfield, sizeof(language_bitfield));
 #if PLATFORM_AMIGA
-                        append_to_log("Added language bitfield 0x%04X to TLV record (field_id=0x%02X)",
+                        whdtlv_log_append("Added language bitfield 0x%04X to TLV record (field_id=0x%02X)",
                                      language_bitfield, language_field_id);
 #endif
                     }
@@ -1165,7 +1165,7 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
                             tlv_record_add_entry(output_record, sps_field_id,
                                                 (const uint8_t*)&sps_id, sizeof(sps_id));
 #if PLATFORM_AMIGA
-                            append_to_log("Added SPS ID %lu to TLV record (field_id=0x%02X)", (unsigned long)sps_id, sps_field_id);
+                            whdtlv_log_append("Added SPS ID %lu to TLV record (field_id=0x%02X)", (unsigned long)sps_id, sps_field_id);
 #endif
                             token_processed = true; /* at least one part matched */
                         }
@@ -1223,7 +1223,7 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
             uint32_t matcher_total = pack_matchers ? pack_matcher_count : (uint32_t)pack_info->num_fields;
             for (uint32_t j = 0; j < matcher_total; j++) {
                 const char *field_name = pack_matchers ? pack_matchers[j].field_name : pack_info->field_list[j];
-                const char *csv_name = pack_matchers ? pack_matchers[j].csv_name : get_csv_filename_for_field(field_registry, field_name);
+                const char *csv_name = pack_matchers ? pack_matchers[j].csv_name : field_registry_get_csv_basename(field_registry, field_name);
                 uint8_t csv_field_id = pack_matchers ? pack_matchers[j].field_id : field_registry_get_id(field_registry, field_name);
                 CSVCache *resolved_cache = pack_matchers ? pack_matchers[j].resolved_cache : NULL;
                 bool generic_csv_match_enabled = pack_matchers ? pack_matchers[j].generic_csv_match_enabled : true;
@@ -1251,14 +1251,14 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
                                  csv_token_matcher_lookup(part_buf, csv_name, field_registry,
                                                        csv_manager, &token_id, &step_error) == PROCESSING_SUCCESS)) {
 #if PLATFORM_AMIGA
-                                append_to_log("Found token '%s' in %s.csv (ID=%lu)", part_buf, csv_name, (unsigned long)token_id);
+                                whdtlv_log_append("Found token '%s' in %s.csv (ID=%lu)", part_buf, csv_name, (unsigned long)token_id);
 #endif
                                 /* Add CSV token ID to TLV record */
                                 if (csv_field_id != 0) {
                                     tlv_record_add_entry(output_record, csv_field_id,
                                                        (const uint8_t*)&token_id, sizeof(token_id));
 #if PLATFORM_AMIGA
-                                    append_to_log("Added %s token ID %lu to TLV record (field_id=0x%02X)",
+                                    whdtlv_log_append("Added %s token ID %lu to TLV record (field_id=0x%02X)",
                                                  csv_name, (unsigned long)token_id, csv_field_id);
 #endif
                                 }
@@ -1284,14 +1284,14 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
                          csv_token_matcher_lookup(token, csv_name, field_registry,
                                                csv_manager, &token_id, &step_error) == PROCESSING_SUCCESS)) {
 #if PLATFORM_AMIGA
-                        append_to_log("Found token '%s' in %s.csv (ID=%lu)", token, csv_name, (unsigned long)token_id);
+                        whdtlv_log_append("Found token '%s' in %s.csv (ID=%lu)", token, csv_name, (unsigned long)token_id);
 #endif
                         /* Add CSV token ID to TLV record */
                         if (csv_field_id != 0) {
                             tlv_record_add_entry(output_record, csv_field_id,
                                                (const uint8_t*)&token_id, sizeof(token_id));
 #if PLATFORM_AMIGA
-                            append_to_log("Added %s token ID %lu to TLV record (field_id=0x%02X)",
+                            whdtlv_log_append("Added %s token ID %lu to TLV record (field_id=0x%02X)",
                                          csv_name, (unsigned long)token_id, csv_field_id);
 #endif
                         }
@@ -1312,7 +1312,7 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
             csv_cache_add_unknown_token_ex(csv_manager, token, filename, pack_info->id);
             TLV_PROFILE_END(TLV_PROFILE_SECTION_UNKNOWN_TOKEN, unknown_token_profile_stamp);
 #if PLATFORM_AMIGA
-            append_to_log("Unknown token: %s", token);
+            whdtlv_log_append("Unknown token: %s", token);
 #endif
         }
     }
@@ -1321,7 +1321,7 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
     tokenized_filename_free(tf);
 
 #if PLATFORM_AMIGA
-    append_to_log("Filename processing completed successfully");
+    whdtlv_log_append("Filename processing completed successfully");
 #endif
 
     return PROCESSING_SUCCESS;
@@ -1329,11 +1329,11 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
 
 /*------------------------------------------------------------------------*/
 /* Pack Type Management - Removed duplicate implementation */
-/* Use load_pack_types() from src/io/pack_types_loader.c instead */
+/* Use whdtlv_load_pack_types() from src/io/pack_types_loader.c instead */
 
 /*------------------------------------------------------------------------*/
 /* Pack Type Management - Removed duplicate implementation */
-/* Use free_pack_types() from src/io/pack_types_loader.c instead */
+/* Use whdtlv_free_pack_types() from src/io/pack_types_loader.c instead */
 
 /**
  * @brief Get pack type by ID

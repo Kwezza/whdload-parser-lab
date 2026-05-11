@@ -87,7 +87,7 @@ bool filter_profile_load_defaults(FilterProfile *pf, const FieldRegistry *reg, G
 					uint32_t resolved_id = 0;
 					/* Attempt real CSV lookup using field csv base if available */
 					if (csv_mgr) {
-						const char *csv_base = get_csv_filename_for_field(reg, base[i].fname);
+						const char *csv_base = field_registry_get_csv_basename(reg, base[i].fname);
 						char csv_name_only[64]; csv_name_only[0]='\0';
 						if (csv_base) {
 							size_t len = strlen(csv_base);
@@ -120,7 +120,7 @@ bool filter_profile_load_defaults(FilterProfile *pf, const FieldRegistry *reg, G
 					unsigned char sid_hash = token_hash8(slots[t][0]);
 					uint32_t resolved_id = 0;
 					if (csv_mgr) {
-						const char *csv_base = get_csv_filename_for_field(reg, base[i].fname);
+						const char *csv_base = field_registry_get_csv_basename(reg, base[i].fname);
 						char csv_name_only[64]; csv_name_only[0]='\0';
 						if (csv_base) {
 							size_t len = strlen(csv_base);

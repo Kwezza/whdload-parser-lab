@@ -90,21 +90,6 @@ bool tlv_record_init(TLV_Record *record);
 void tlv_record_free(TLV_Record *record);
 
 /**
- * @brief Add entry to TLV record using field name (dynamic registry lookup)
- * @param record TLV record to add to
- * @param field_registry Dynamic field registry for ID resolution
- * @param field_name Field name to add
- * @param value Pointer to value data
- * @param length Length of value data
- * @return true if successful, false on error
- */
-bool tlv_record_add_field_by_name(TLV_Record *record,
-                                 const FieldRegistry *field_registry,
-                                 const char *field_name,
-                                 const uint8_t *value,
-                                 uint16_t length);
-
-/**
  * @brief Add entry to TLV record using field ID directly
  * @param record TLV record to add to
  * @param field_id Field ID from dynamic registry
@@ -128,14 +113,6 @@ const TLV_Entry *tlv_record_get_field_by_name(const TLV_Record *record,
                                              const FieldRegistry *field_registry,
                                              const char *field_name);
 
-/**
- * @brief Get entry from TLV record by field ID
- * @param record TLV record to search
- * @param field_id Field ID to find
- * @return Pointer to TLV_Entry if found, NULL if not found
- */
-const TLV_Entry *tlv_record_get_entry(const TLV_Record *record, uint8_t field_id);
-
 /*------------------------------------------------------------------------*/
 /* TLV File I/O */
 
@@ -150,39 +127,10 @@ bool tlv_write_record_with_metadata(FILE *file,
                                    const TLV_Record *record,
                                    const FieldRegistry *field_registry);
 
-/**
- * @brief Write embedded metadata map to TLV file
- * @param file Output file
- * @param field_registry Dynamic field registry
- * @return true if successful, false on error
- */
-bool tlv_write_metadata_map(FILE *file, const FieldRegistry *field_registry);
-
-/**
- * @brief Read TLV record from file and reconstruct field registry
- * @param file Input file
- * @param record TLV record to populate
- * @param field_registry Output: reconstructed field registry (if metadata map present)
- * @return true if successful, false on error
- */
-bool tlv_read_record_with_metadata(FILE *file,
-                                  TLV_Record *record,
-                                  FieldRegistry **field_registry);
-
-/**
- * @brief Check if TLV file contains embedded metadata map
- * @param file Input file (will be rewound)
- * @return true if metadata map present, false otherwise
- */
-bool tlv_has_metadata_map(FILE *file);
-
-/**
- * @brief Read embedded metadata map from TLV file
- * @param file Input file
- * @param field_registry Field registry to populate
- * @return true if successful, false on error
- */
-bool tlv_read_metadata_map(FILE *file, FieldRegistry *field_registry);
+/* tlv_read_record_with_metadata, tlv_has_metadata_map: declared in
+ * <tlv_filename/tlv_reader.h> (internal read-back API, not part of the
+ * public build-from-DAT surface).  tlv_read_metadata_map is static in
+ * tlv_builder.c and is not declared in any header. */
 
 /*------------------------------------------------------------------------*/
 /* Session Management */
@@ -227,33 +175,14 @@ bool tlv_session_process_batch(const char **filenames, uint32_t filename_count,
 bool tlv_session_inject_group_ids(TLV_Record *records, uint32_t count);
 
 /**
- * @brief Write the group-map header block (type 0x02) to a TLV file.
- *
- * Must be called after tlv_write_metadata_map and tlv_write_csv_fingerprints
- * but before any variant records are written.  tlv_write_record_with_metadata
- * calls this automatically.
- *
- * Wire format:
- *   [1 byte : 0x02 (TLV_TYPE_GROUP_MAP)]
- *   [2 bytes LE: payload_size]
- *   [2 bytes LE: group_count]
- *   per entry:
- *     [2 bytes BE: group_id]
- *     [1 byte   : name_len]
- *     [name_len bytes: group_name (no NUL)]
- *
- * @param file Output file positioned immediately after block 0x04.
- * @return true on success; false on write error.
- */
-bool tlv_write_group_map(FILE *file);
-
-/**
  * @brief Finalize TLV processing session and cleanup resources
  */
 void tlv_session_finalize(void);
 
 /*------------------------------------------------------------------------*/
 /* Legacy Compatibility */
+
+#ifdef WHDTLV_LEGACY_API
 
 /**
  * @brief Create TLV record from CSV data and configuration (legacy interface)
@@ -274,6 +203,8 @@ TLV_Record *tlv_builder_create_record(const char *pack_name,
  * @return true if successful, false on error
  */
 bool build_tlv_from_dat(const char *dat_path, const char *csv_folder_path, const char *output_path);
+
+#endif /* WHDTLV_LEGACY_API */
 
 /*------------------------------------------------------------------------*/
 

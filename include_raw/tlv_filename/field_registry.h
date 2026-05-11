@@ -94,18 +94,9 @@ void field_registry_free(FieldRegistry *registry);
  */
 bool build_field_registry_from_ini(FieldRegistry *registry, const char *pack_types_ini_path);
 
-/**
- * @brief Build field registry from pack types array
- * @param registry Field registry to populate
- * @param pack_types Array of pack type definitions
- * @param pack_count Number of pack types in array
- * @param error Error context for reporting issues
- * @return PROCESSING_SUCCESS if successful, error code otherwise
- */
-ProcessingResult build_field_registry_from_pack_types(FieldRegistry *registry,
-                                                      const PackType *pack_types,
-                                                      size_t pack_count,
-                                                      ProcessingError *error);
+/* build_field_registry_from_pack_types: declaration removed in Phase 2 header
+ * hygiene (2026-05-11); build_field_registry_from_ini used instead.
+ * Definition retained in field_registry.c. */
 
 /*------------------------------------------------------------------------*/
 /* Field Resolution */
@@ -132,7 +123,7 @@ const char *field_registry_get_name(const FieldRegistry *registry, uint8_t field
  * @param field_name Field name to look up
  * @return CSV filename if found, NULL if not found
  */
-const char *get_csv_filename_for_field(const FieldRegistry *registry, const char *field_name);
+const char *field_registry_get_csv_basename(const FieldRegistry *registry, const char *field_name);
 
 /**
  * @brief Add field to registry with specific field ID (for metadata map reconstruction)
@@ -146,12 +137,8 @@ bool field_registry_add_field(FieldRegistry *registry, const char *field_name, u
 /*------------------------------------------------------------------------*/
 /* Registry Validation */
 
-/**
- * @brief Check if field registry has available field IDs
- * @param registry Field registry
- * @return true if IDs available, false if approaching limit
- */
-bool field_registry_has_available_ids(const FieldRegistry *registry);
+/* field_registry_validate, field_registry_has_available_ids: declarations removed
+ * in Phase 2 header hygiene (2026-05-11). Definitions retained in field_registry.c. */
 
 /**
  * @brief Get count of registered fields
@@ -160,12 +147,8 @@ bool field_registry_has_available_ids(const FieldRegistry *registry);
  */
 uint32_t field_registry_get_count(const FieldRegistry *registry);
 
-/**
- * @brief Validate field registry for potential issues
- * @param registry Field registry
- * @return true if valid, false if issues detected
- */
-bool field_registry_validate(const FieldRegistry *registry);
+/* field_registry_validate: declaration removed in Phase 2 header hygiene
+ * (2026-05-11). Definition retained in field_registry.c. */
 
 /*------------------------------------------------------------------------*/
 /* Field Attributes (INI-driven) */
@@ -204,16 +187,9 @@ typedef struct {
     bool allow_multiple;        /* Allow multiple matches */
 } FieldPrescanConfig;
 
-/**
- * @brief Get prescan configuration for a single field
- * @param registry Field registry
- * @param field_name Field name to query
- * @param out_cfg Output config (filled if field exists)
- * @return true if field exists and has prescan settings available
- */
-bool field_registry_get_prescan_config(const FieldRegistry *registry,
-                                       const char *field_name,
-                                       FieldPrescanConfig *out_cfg);
+/* field_registry_get_prescan_config: declaration removed in Phase 2 header
+ * hygiene (2026-05-11); superseded by field_registry_list_prescan_fields.
+ * Definition retained in field_registry.c. */
 
 /**
  * @brief List all fields with prescan enabled
@@ -229,22 +205,10 @@ uint32_t field_registry_list_prescan_fields(const FieldRegistry *registry,
 /*------------------------------------------------------------------------*/
 /* Default Token Accessors */
 
-/**
- * @brief Set default token id for a field
- * @param registry Field registry
- * @param field_name Field name
- * @param token_id CSV numeric id to use as default
- * @return true if field found and updated
- */
+/* Used by staged filter work -- do not remove declaration */
 bool field_registry_set_default(FieldRegistry *registry, const char *field_name, uint16_t token_id);
 
-/**
- * @brief Get default token id for a field id
- * @param registry Field registry
- * @param field_id Runtime field id
- * @param has_default Optional out flag (may be NULL)
- * @return token id if present, 0 if none
- */
+/* Used by staged filter work -- do not remove declaration */
 uint16_t field_registry_get_default_token_id(const FieldRegistry *registry, uint8_t field_id, bool *has_default);
 
 /*------------------------------------------------------------------------*/

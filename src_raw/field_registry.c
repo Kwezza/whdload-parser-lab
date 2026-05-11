@@ -558,7 +558,7 @@ const char *field_registry_get_name(const FieldRegistry *registry, uint8_t field
 /**
  * @brief Get CSV filename for a field name
  */
-const char *get_csv_filename_for_field(const FieldRegistry *registry, const char *field_name)
+const char *field_registry_get_csv_basename(const FieldRegistry *registry, const char *field_name)
 {
     uint32_t i;
 
@@ -582,7 +582,7 @@ const char *get_csv_filename_for_field(const FieldRegistry *registry, const char
     }
 
     return NULL; /* Not found */
-} /* get_csv_filename_for_field */
+} /* field_registry_get_csv_basename */
 
 /*------------------------------------------------------------------------*/
 

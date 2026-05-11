@@ -51,6 +51,14 @@ static uint32_t g_csv_find_ci_hits  = 0;
 #endif
 
 /*------------------------------------------------------------------------*/
+/* Static function forward declarations */
+static uint32_t csv_direct_file_lookup(const char *csv_path, const char *token);
+static bool csv_cache_manager_init_with_config(GlobalCSVManager *manager,
+                                               struct AppCtx *ctx,
+                                               const char *csv_base_path,
+                                               uint32_t memory_limit_kb);
+
+/*------------------------------------------------------------------------*/
 /* Internal Hash Table Functions */
 
 /**
@@ -466,10 +474,10 @@ static bool csv_load_file_into_cache(CSVCache *cache, const char *csv_path) {
     uint32_t crc_accum;
 
     /* First pass: count entries and compute CRC-32 over raw file bytes */
-    crc_accum = crc32_init();
+    crc_accum = whdtlv_crc32_init();
     while (fgets(line, sizeof(line), file)) {
         uint32_t id; char *name; char *long_name = NULL; bool is_def=false;
-        crc_accum = crc32_update(crc_accum, (const unsigned char *)line, strlen(line));
+        crc_accum = whdtlv_crc32_update(crc_accum, (const unsigned char *)line, strlen(line));
         if (csv_parse_line(line, &id, &name, &long_name, &is_def)) {
             entry_count++;
 #if PLATFORM_HOST
@@ -479,7 +487,7 @@ static bool csv_load_file_into_cache(CSVCache *cache, const char *csv_path) {
             if (long_name) { whd_free(long_name); }
         }
     }
-    cache->crc32 = crc32_finalize(crc_accum);
+    cache->crc32 = whdtlv_crc32_finalize(crc_accum);
 
 #if PLATFORM_HOST
     CSVDBG("DEBUG: First pass complete. Entry count: %u\n", entry_count);
@@ -517,7 +525,7 @@ static bool csv_load_file_into_cache(CSVCache *cache, const char *csv_path) {
         if (csv_parse_line(line, &id, &name, &long_name, &is_def)) {
             if (!csv_cache_insert(cache, name, long_name, id)) {
 #if PLATFORM_AMIGA
-                append_to_log("WARNING: Failed to insert token '%s' into cache", name);
+                whdtlv_log_append("WARNING: Failed to insert token '%s' into cache", name);
 #endif
             }
             if (is_def && !cache->has_default_token) { cache->has_default_token = true; cache->default_token_id = id; }
@@ -548,7 +556,7 @@ bool csv_cache_manager_init(GlobalCSVManager *manager, struct AppCtx *ctx, const
 /**
  * @brief Initialize CSV cache manager with specific memory configuration
  */
-bool csv_cache_manager_init_with_config(GlobalCSVManager *manager,
+static bool csv_cache_manager_init_with_config(GlobalCSVManager *manager,
                                        struct AppCtx *ctx, /* currently unused */
                                        const char *csv_base_path,
                                        uint32_t memory_limit_kb) {
@@ -588,7 +596,7 @@ bool csv_cache_manager_init_with_config(GlobalCSVManager *manager,
     }
 
 #if PLATFORM_AMIGA
-    append_to_log("CSV cache manager initialized with %luKB memory limit", (unsigned long)memory_limit_kb);
+    whdtlv_log_append("CSV cache manager initialized with %luKB memory limit", (unsigned long)memory_limit_kb);
 #endif
 
     return true;
@@ -706,7 +714,7 @@ bool csv_cache_load_file(GlobalCSVManager *manager, const char *csv_name) {
         }
 
 #if PLATFORM_AMIGA
-        append_to_log("WARNING: Missing CSV file '%s' - field will be skipped", csv_name);
+        whdtlv_log_append("WARNING: Missing CSV file '%s' - field will be skipped", csv_name);
 #endif
         return false; /* Not loaded, but not fatal */
     }
@@ -719,7 +727,7 @@ bool csv_cache_load_file(GlobalCSVManager *manager, const char *csv_name) {
     if (manager->cache_enabled && manager->total_memory_kb >= manager->memory_limit_kb) {
         manager->cache_enabled = false;
 #if PLATFORM_AMIGA
-    append_to_log("CSV caching disabled: memory limit %luKB exceeded", (unsigned long)manager->memory_limit_kb);
+    whdtlv_log_append("CSV caching disabled: memory limit %luKB exceeded", (unsigned long)manager->memory_limit_kb);
 #endif
         return false;
     }
@@ -750,7 +758,7 @@ bool csv_cache_load_file(GlobalCSVManager *manager, const char *csv_name) {
     manager->total_memory_kb += cache->memory_usage_kb;
 
 #if PLATFORM_AMIGA
-    append_to_log("Loaded CSV '%s': %lu entries, %luKB memory",
+    whdtlv_log_append("Loaded CSV '%s': %lu entries, %luKB memory",
                  csv_name, (unsigned long)cache->entry_count, (unsigned long)cache->memory_usage_kb);
 #endif
 
@@ -1061,7 +1069,7 @@ const char *csv_cache_find_token_source(GlobalCSVManager *manager, const char *t
 /**
  * @brief Direct file lookup (used when caching disabled)
  */
-uint32_t csv_direct_file_lookup(const char *csv_path, const char *token) {
+static uint32_t csv_direct_file_lookup(const char *csv_path, const char *token) {
     if (!csv_path || !token) {
         return 0;
     }
@@ -1238,7 +1246,7 @@ bool csv_cache_add_unknown_token_ex(GlobalCSVManager *manager, const char *token
     manager->unknown_count++;
 
 #if PLATFORM_AMIGA
-    append_to_log("UNKNOWN: Token '%s' from '%s' added to special.csv review list", token, filename);
+    whdtlv_log_append("UNKNOWN: Token '%s' from '%s' added to special.csv review list", token, filename);
 #endif
 
     return true;
@@ -1251,7 +1259,7 @@ bool csv_cache_add_unknown_token(GlobalCSVManager *manager, const char *token, c
 /**
  * @brief Check if token already exists in special.csv
  */
-bool csv_cache_is_token_in_special(GlobalCSVManager *manager, const char *token) {
+static bool csv_cache_is_token_in_special(GlobalCSVManager *manager, const char *token) {
     if (!manager || !token || !manager->special_cache) {
         return false;
     }
@@ -1300,7 +1308,7 @@ static void write_split_special_lines(FILE *out,
         /* Pretty for this part */
         char pretty_buf[256];
         const char *pretty_out = token_part;
-        if (prettify_title(token_part, pretty_buf, sizeof(pretty_buf))) {
+        if (whdtlv_prettify_title(token_part, pretty_buf, sizeof(pretty_buf))) {
             pretty_out = pretty_buf;
         }
 
@@ -1541,7 +1549,7 @@ next_line_rewrite: ;
     rename(tmp_path, special_csv_path);
 
 #if PLATFORM_AMIGA
-    append_to_log("Updated special.csv: %u new tokens added, %u duplicates skipped",
+    whdtlv_log_append("Updated special.csv: %u new tokens added, %u duplicates skipped",
                  (unsigned)added_count, (unsigned)manager->duplicates_skipped);
 #endif
 
@@ -1583,18 +1591,18 @@ void csv_cache_report_summary(const GlobalCSVManager *manager) {
 
 #if PLATFORM_AMIGA
     if (manager->missing_csv_count > 0) {
-        append_to_log("PROCESSING SUMMARY:");
-    append_to_log("  Loaded CSVs: %lu", (unsigned long)manager->cache_count);
-    append_to_log("  Missing CSVs: %lu", (unsigned long)manager->missing_csv_count);
-        append_to_log("  Cache mode: %s", manager->cache_enabled ? "ENABLED" : "DIRECT_ACCESS");
-    append_to_log("  Memory usage: %luKB / %luKB", (unsigned long)manager->total_memory_kb, (unsigned long)manager->memory_limit_kb);
+        whdtlv_log_append("PROCESSING SUMMARY:");
+    whdtlv_log_append("  Loaded CSVs: %lu", (unsigned long)manager->cache_count);
+    whdtlv_log_append("  Missing CSVs: %lu", (unsigned long)manager->missing_csv_count);
+        whdtlv_log_append("  Cache mode: %s", manager->cache_enabled ? "ENABLED" : "DIRECT_ACCESS");
+    whdtlv_log_append("  Memory usage: %luKB / %luKB", (unsigned long)manager->total_memory_kb, (unsigned long)manager->memory_limit_kb);
 
         for (uint32_t i = 0; i < manager->missing_csv_count; i++) {
-            append_to_log("    Missing: %s.csv", manager->missing_csv_names[i]);
+            whdtlv_log_append("    Missing: %s.csv", manager->missing_csv_names[i]);
         }
     } else {
-    append_to_log("CSV loading complete: %lu files loaded successfully", (unsigned long)manager->cache_count);
-    append_to_log("Memory usage: %luKB / %luKB", (unsigned long)manager->total_memory_kb, (unsigned long)manager->memory_limit_kb);
+    whdtlv_log_append("CSV loading complete: %lu files loaded successfully", (unsigned long)manager->cache_count);
+    whdtlv_log_append("Memory usage: %luKB / %luKB", (unsigned long)manager->total_memory_kb, (unsigned long)manager->memory_limit_kb);
     }
 #endif
 }

@@ -14,7 +14,7 @@
 #include <group_util.h>
 #include <string.h>
 
-unsigned long derive_group_name(const char    *display_name,
+unsigned long whdtlv_derive_group_name(const char    *display_name,
                                 char          *out,
                                 unsigned long  out_size)
 {

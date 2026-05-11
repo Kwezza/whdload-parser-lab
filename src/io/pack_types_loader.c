@@ -348,7 +348,7 @@ char *strtrim(const char *src)
  * @param out_parts Pointer to receive allocated array of string parts
  * @return true if successful with correct part count, false otherwise
  */
-bool validate_and_split(const char *str, char delimiter, int expected_parts, char ***out_parts)
+static bool validate_and_split(const char *str, char delimiter, int expected_parts, char ***out_parts)
 {
     char *str_copy;
     char *pos;
@@ -559,7 +559,7 @@ static bool parse_field_list(const char *field_list, char ***out_fields, size_t 
  * @param out_count Pointer to receive number of loaded pack types
  * @return Dynamically allocated array of PackType structures, or NULL on error
  */
-PackType *load_pack_types(const char *ini_path, size_t *out_count)
+PackType *whdtlv_load_pack_types(const char *ini_path, size_t *out_count)
 {
     FILE *fp;
     char line_buffer[MAX_LINE_LENGTH];
@@ -754,7 +754,7 @@ PackType *load_pack_types(const char *ini_path, size_t *out_count)
 
     *out_count = pack_count;
     return pack_types;
-} /* load_pack_types */
+} /* whdtlv_load_pack_types */
 
 /*------------------------------------------------------------------------*/
 
@@ -767,7 +767,7 @@ PackType *load_pack_types(const char *ini_path, size_t *out_count)
  * @param packs Pack types array to free
  * @param count Number of pack types in array
  */
-void free_pack_types(PackType *packs, size_t count)
+void whdtlv_free_pack_types(PackType *packs, size_t count)
 {
     size_t i, j;
 
@@ -790,6 +790,6 @@ void free_pack_types(PackType *packs, size_t count)
     } /* for */
 
     whd_free(packs);
-} /* free_pack_types */
+} /* whdtlv_free_pack_types */
 
 /* End of Text */

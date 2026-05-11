@@ -101,19 +101,6 @@ typedef struct {
 bool csv_cache_manager_init(GlobalCSVManager *manager, struct AppCtx *ctx, const char *csv_base_path);
 
 /**
- * @brief Initialize CSV cache manager with specific memory configuration
- * @param manager CSV manager to initialize
- * @param ctx Application context for resource access
- * @param csv_base_path Base directory path for CSV files
- * @param memory_limit_kb Memory limit in kilobytes
- * @return true if successful, false on error
- */
-bool csv_cache_manager_init_with_config(GlobalCSVManager *manager,
-                                       struct AppCtx *ctx,
-                                       const char *csv_base_path,
-                                       uint32_t memory_limit_kb);
-
-/**
  * @brief Clean up CSV cache manager and all resources
  * @param manager CSV manager to cleanup
  */
@@ -130,13 +117,8 @@ void csv_cache_manager_cleanup(GlobalCSVManager *manager);
  */
 bool csv_cache_load_file(GlobalCSVManager *manager, const char *csv_name);
 
-/**
- * @brief Load existing special.csv into cache for duplicate checking
- * @param manager CSV manager
- * @param special_csv_path Path to special.csv file
- * @return true if loaded, false on error
- */
-bool csv_cache_load_special_csv(GlobalCSVManager *manager, const char *special_csv_path);
+/* csv_cache_load_special_csv: declaration removed in Phase 2 header hygiene
+ * (2026-05-11). Definition retained in csv_cache.c. */
 
 /*------------------------------------------------------------------------*/
 /* Lookup Operations */
@@ -218,15 +200,8 @@ const char *csv_cache_find_token_source(GlobalCSVManager *manager, const char *t
  * - This performs a linear scan over the cache's hash table and is O(N),
  *   intended for diagnostics and preview output, not hot paths.
  */
-/**
- * @brief Reverse lookup with display selection: return token (short) or long name
- * @param manager CSV manager
- * @param csv_name CSV cache name to search (without .csv extension)
- * @param id Numeric ID to resolve
- * @param want_long If true and a long name exists, return it; otherwise return the short token
- * @return Pointer to string owned by cache (or static buffer when cache disabled), or NULL
- */
-const char *csv_cache_reverse_lookup(GlobalCSVManager *manager, const char *csv_name, uint32_t id, bool want_long);
+/* csv_cache_reverse_lookup: declaration removed in Phase 2 header hygiene
+ * (2026-05-11). Definition retained in csv_cache.c. */
 
 /**
  * @brief Get default token id (and flag) for a CSV cache
@@ -241,15 +216,6 @@ uint32_t csv_cache_get_default_token(GlobalCSVManager *manager, const char *csv_
 /* Unknown Token Management */
 
 /**
- * @brief Add token to unknown tokens list for special.csv
- * @param manager CSV manager
- * @param token Token not found in any CSV
- * @param filename Source filename for context
- * @return true if added, false if duplicate or error
- */
-bool csv_cache_add_unknown_token(GlobalCSVManager *manager, const char *token, const char *filename);
-
-/**
  * @brief Add token to unknown tokens list with explicit pack id (extended API)
  * @param manager CSV manager
  * @param token Token not found in any CSV
@@ -259,53 +225,17 @@ bool csv_cache_add_unknown_token(GlobalCSVManager *manager, const char *token, c
  */
 bool csv_cache_add_unknown_token_ex(GlobalCSVManager *manager, const char *token, const char *filename, uint8_t pack_id);
 
-/**
- * @brief Check if token already exists in special.csv cache
- * @param manager CSV manager
- * @param token Token to check
- * @return true if exists, false if new
- */
-bool csv_cache_is_token_in_special(GlobalCSVManager *manager, const char *token);
-
-/**
- * @brief Write unknown tokens to special.csv file
- * @param manager CSV manager
- * @param special_csv_path Path to special.csv file
- * @return true if written successfully, false on error
- */
-bool csv_cache_update_special_csv(GlobalCSVManager *manager, const char *special_csv_path);
+/* csv_cache_update_special_csv: declaration removed in Phase 2 header hygiene
+ * (2026-05-11). Definition retained in csv_cache.c. */
 
 /*------------------------------------------------------------------------*/
 /* Memory and Statistics */
 
-/**
- * @brief Get memory usage and cache statistics
- * @param manager CSV manager
- * @param total_kb Total memory used in KB (output)
- * @param limit_kb Memory limit in KB (output)
- * @param cache_enabled Whether caching is active (output)
- */
-void csv_cache_get_memory_stats(const GlobalCSVManager *manager,
-                               uint32_t *total_kb,
-                               uint32_t *limit_kb,
-                               bool *cache_enabled);
-
-/**
- * @brief Print cache statistics and summary
- * @param manager CSV manager
- */
-void csv_cache_report_summary(const GlobalCSVManager *manager);
+/* csv_cache_get_memory_stats, csv_cache_report_summary: declarations removed in
+ * Phase 2 header hygiene (2026-05-11). Definitions retained in csv_cache.c. */
 
 /*------------------------------------------------------------------------*/
 /* Direct File Access (Fallback) */
-
-/**
- * @brief Direct CSV file lookup when cache is disabled
- * @param csv_path Full path to CSV file
- * @param token Token to find
- * @return Token ID if found, 0 if not found
- */
-uint32_t csv_direct_file_lookup(const char *csv_path, const char *token);
 
 /**
  * @brief Print diagnostic counters for the CSV cache (profiling builds only)
@@ -319,14 +249,8 @@ void csv_cache_print_stats(FILE *stream);
 /*------------------------------------------------------------------------*/
 /* CRC Fingerprint Access */
 
-/**
- * @brief Retrieve the CRC-32 fingerprint for a loaded CSV cache.
- * @param manager  CSV manager
- * @param csv_name CSV base name (without .csv extension)
- * @param out_crc  Receives the CRC-32 value if the cache is found
- * @return true if the cache was found and out_crc was set, false otherwise
- */
-bool csv_cache_get_crc(const GlobalCSVManager *manager, const char *csv_name, uint32_t *out_crc);
+/* csv_cache_get_crc: declaration removed in Phase 2 header hygiene
+ * (2026-05-11). Definition retained in csv_cache.c. */
 
 #endif /* TLV_FILENAME_CSV_CACHE_H */
 

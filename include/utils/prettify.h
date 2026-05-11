@@ -30,7 +30,7 @@
  * @param csv_path Path to the name_overrides.csv file (may be NULL)
  * @return bool true on success, false on failure
  */
-bool prettify_init(const char *csv_path);
+bool whdtlv_prettify_init(const char *csv_path);
 
 /**
  * @brief Get pretty name for a raw WHDLoad pack name
@@ -45,15 +45,15 @@ bool prettify_init(const char *csv_path);
  * @param cap Capacity of output buffer
  * @return char* Pointer to buf on success, NULL on failure
  */
-char *prettify_title(const char *raw, char *buf, size_t cap);
+char *whdtlv_prettify_title(const char *raw, char *buf, size_t cap);
 
 /**
  * @brief Free all resources used by the prettify system
  *
- * Releases all memory allocated by prettify_init(). Safe to call
+ * Releases all memory allocated by whdtlv_prettify_init(). Safe to call
  * multiple times.
  */
-void prettify_shutdown(void);
+void whdtlv_prettify_shutdown(void);
 
 #endif /* UTILS_PRETTIFY_H */
 

@@ -70,7 +70,7 @@ static void apply_list(FilterProfile *pf, FP_FieldProfile *fp, const FieldRegist
 		trim(tokens[i]); if (!*tokens[i]) { continue; }
 		uint32_t resolved_id = 0; unsigned char h = token_hash8(tokens[i]);
 		if (csv_mgr) {
-			const char *csv_base = get_csv_filename_for_field(reg, field_name);
+			const char *csv_base = field_registry_get_csv_basename(reg, field_name);
 			char csv_name_only[64]; csv_name_only[0]='\0';
 			if (csv_base) {
 				size_t len = strlen(csv_base);

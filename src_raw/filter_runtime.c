@@ -6,6 +6,7 @@
 #include <filter/filter_pipeline.h>
 #include <filter/profile_loader.h>
 #include <tlv_filename/tlv_builder.h>
+#include <tlv_filename/tlv_reader.h>
 #include <utils/prefs.h>
 #include <utils/logging.h>
 #include <platform/platform_io.h>

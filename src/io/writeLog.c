@@ -87,10 +87,10 @@ static void get_timestamp(char *buf, size_t buf_sz)
  * @param enabled true to allow logfile writes, false to suppress them
  */
 /*------------------------------------------------------------------------*/
-void set_logging_enabled(bool enabled)
+void whdtlv_log_set_enabled(bool enabled)
 {
 	logging_enabled = enabled;
-} /* set_logging_enabled */
+} /* whdtlv_log_set_enabled */
 
 /*------------------------------------------------------------------------*/
 /**
@@ -99,10 +99,10 @@ void set_logging_enabled(bool enabled)
  * @return true if logfile writes are enabled, false otherwise
  */
 /*------------------------------------------------------------------------*/
-bool is_logging_enabled(void)
+bool whdtlv_log_is_enabled(void)
 {
 	return logging_enabled;
-} /* is_logging_enabled */
+} /* whdtlv_log_is_enabled */
 
 /*------------------------------------------------------------------------*/
 /**
@@ -112,7 +112,7 @@ bool is_logging_enabled(void)
  * @param ...    Variable arguments
  */
 /*------------------------------------------------------------------------*/
-void append_to_log(const char *format, ...)
+void whdtlv_log_append(const char *format, ...)
 {
 	FILE *fp;                       /* File handle */
 	char buffer[MAX_LOG_LINE];      /* Buffer for complete log message */
@@ -188,14 +188,14 @@ void append_to_log(const char *format, ...)
 		whd_fwrite(buffer, 1, strlen(buffer), fp);
 		whd_fclose(fp);
 	} /* if */
-} /* append_to_log */
+} /* whdtlv_log_append */
 
 /*------------------------------------------------------------------------*/
 /**
  * @brief Initializes the log file by creating a new empty file
  */
 /*------------------------------------------------------------------------*/
-void initialize_logfile(void)
+void whdtlv_log_init(void)
 {
 	FILE *fp;  /* File handle */
 	char timestamp[TIMESTAMP_SIZE]; /* Buffer for timestamp */
@@ -219,6 +219,6 @@ void initialize_logfile(void)
 		whd_fwrite(buffer, 1, strlen(buffer), fp);
 		whd_fclose(fp);
 	} /* if */
-} /* initialize_logfile */
+} /* whdtlv_log_init */
 
 /* End of Text */

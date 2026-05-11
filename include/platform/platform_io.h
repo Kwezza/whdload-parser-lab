@@ -64,8 +64,8 @@ typedef struct whd_dir whd_dir_t;
 /* Console output abstraction */
 /* NOTE: Both platforms now use standard printf() */
 
-/* Path utilities */
-void whd_normalize_path(char *path);  /* Convert separators to platform-native */
+/* whd_normalize_path: declaration removed in Phase 2 header hygiene
+ * (2026-05-11). Definition retained in platform_io.c. */
 
 /* Standard constants */
 #ifndef F_OK

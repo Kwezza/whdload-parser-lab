@@ -54,28 +54,8 @@ typedef struct {
 /*------------------------------------------------------------------------*/
 /* TLV Metadata Map API */
 
-/**
- * @brief Write metadata map to TLV file as type 0x01
- * @param tlv_file Output TLV file handle
- * @param registry Field registry to embed
- * @return true if successful, false on error
- */
-bool tlv_write_metadata_map(FILE *tlv_file, const FieldRegistry *registry);
-
-/**
- * @brief Read metadata map from TLV file and reconstruct field registry
- * @param tlv_file Input TLV file handle
- * @param registry Field registry to populate
- * @return true if successful, false on error
- */
-bool tlv_read_metadata_map(FILE *tlv_file, FieldRegistry *registry);
-
-/**
- * @brief Check if TLV file contains embedded metadata map
- * @param tlv_file TLV file handle (positioned at start)
- * @return true if metadata map present, false otherwise
- */
-bool tlv_has_metadata_map(FILE *tlv_file);
+/* tlv_read_metadata_map: static in tlv_builder.c — not declared here.
+ * tlv_has_metadata_map: declared in <tlv_filename/tlv_reader.h>. */
 
 /*------------------------------------------------------------------------*/
 /* Metadata Map Management */
@@ -152,15 +132,6 @@ typedef struct {
 
 /*------------------------------------------------------------------------*/
 /* CSV Fingerprint API */
-
-/**
- * @brief Write a type 0x04 CSV fingerprint record to a TLV file.
- * Iterates all loaded caches in the manager and writes one entry per cache.
- * @param tlv_file Output TLV file handle (must be open for writing)
- * @param manager  CSV cache manager holding the loaded caches and their CRCs
- * @return true if successful, false on error
- */
-bool tlv_write_csv_fingerprints(FILE *tlv_file, const GlobalCSVManager *manager);
 
 /**
  * @brief Read and deserialise a type 0x04 CSV fingerprint record from a TLV file.

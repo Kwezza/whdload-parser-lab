@@ -614,19 +614,19 @@ static bool process_dat_file(const char *dat_path,
     memset(&aggregate, 0, sizeof(aggregate));
     copy_path_string(resolved_summary_log_path, sizeof(resolved_summary_log_path), summary_log_path);
 
-    append_to_log("Standalone DAT-to-TLV run starting for '%s'", dat_path);
-    append_to_log("Stage: parsing DAT filenames");
+    whdtlv_log_append("Standalone DAT-to-TLV run starting for '%s'", dat_path);
+    whdtlv_log_append("Stage: parsing DAT filenames");
 #ifdef PLATFORM_AMIGA
     print_amiga_stage("parsing DAT filenames");
 #endif
 
     filename_count = parse_dat_entries_minimal(dat_path, &dat_entries);
     if (filename_count == 0 || !dat_entries) {
-        append_to_log("ERROR: no DAT filenames extracted from '%s'", dat_path);
+        whdtlv_log_append("ERROR: no DAT filenames extracted from '%s'", dat_path);
         fprintf(stderr, "No DAT filenames extracted from %s\n", dat_path);
         goto cleanup;
     }
-    append_to_log("Stage complete: parsed %lu DAT filenames", (unsigned long)filename_count);
+    whdtlv_log_append("Stage complete: parsed %lu DAT filenames", (unsigned long)filename_count);
 
     name_ptrs = (const char **)whd_malloc(filename_count * sizeof(const char *));
     if (!name_ptrs) {
@@ -698,7 +698,7 @@ static bool process_dat_file(const char *dat_path,
      * Must happen before aggregation so group_id entries are merged in. */
     if (!tlv_session_inject_group_ids(records, (uint32_t)filename_count)) {
         fprintf(stderr, "WARNING: failed to inject group_id fields\n");
-        append_to_log("WARNING: failed to inject group_id fields");
+        whdtlv_log_append("WARNING: failed to inject group_id fields");
     }
 
 #ifdef PLATFORM_AMIGA
@@ -781,7 +781,7 @@ static bool process_dat_file(const char *dat_path,
                             build_elapsed_ms,
                             save_elapsed_ms)) {
         fprintf(stderr, "WARNING: failed to append summary log %s\n", summary_log_path);
-        append_to_log("WARNING: failed to append summary log %s", summary_log_path);
+        whdtlv_log_append("WARNING: failed to append summary log %s", summary_log_path);
     } else if (strcmp(resolved_summary_log_path, summary_log_path) != 0) {
         printf("Summary log fallback used: %s\n", resolved_summary_log_path);
     }
@@ -902,33 +902,33 @@ int main(int argc, char **argv)
         pack_types_path = positional_args[3];
     }
 
-    set_logging_enabled(logging_requested);
-    initialize_logfile();
+    whdtlv_log_set_enabled(logging_requested);
+    whdtlv_log_init();
     tlv_profile_reset();
-    append_to_log("WARNING: set a high Amiga stack manually before running (example: STACK 100000) to avoid crashes");
+    whdtlv_log_append("WARNING: set a high Amiga stack manually before running (example: STACK 100000) to avoid crashes");
 
-    append_to_log("Stage: loading pack types");
+    whdtlv_log_append("Stage: loading pack types");
 #ifdef PLATFORM_AMIGA
     print_amiga_stage("loading pack types");
 #endif
-    pack_types = load_pack_types(pack_types_path, &pack_count);
+    pack_types = whdtlv_load_pack_types(pack_types_path, &pack_count);
     if (!pack_types || pack_count == 0) {
-        append_to_log("ERROR: failed to load pack types from '%s'", pack_types_path);
+        whdtlv_log_append("ERROR: failed to load pack types from '%s'", pack_types_path);
         fprintf(stderr, "Failed to load pack types from %s\n", pack_types_path);
         goto cleanup;
     }
-    append_to_log("Stage complete: loaded %lu pack types", (unsigned long)pack_count);
+    whdtlv_log_append("Stage complete: loaded %lu pack types", (unsigned long)pack_count);
 
-    append_to_log("Stage: initializing TLV session");
+    whdtlv_log_append("Stage: initializing TLV session");
 #ifdef PLATFORM_AMIGA
     print_amiga_stage("initializing TLV session");
 #endif
     if (!tlv_session_init(csv_dir, pack_types_path)) {
-        append_to_log("ERROR: failed to initialize TLV session");
+        whdtlv_log_append("ERROR: failed to initialize TLV session");
         fprintf(stderr, "Failed to initialize TLV session\n");
         goto cleanup;
     }
-    append_to_log("Stage complete: TLV session initialized");
+    whdtlv_log_append("Stage complete: TLV session initialized");
 
     all_success = true;
     if (positional_argc >= 2) {
@@ -965,9 +965,9 @@ cleanup:
 #endif
     tlv_session_finalize();
     if (pack_types) {
-        free_pack_types(pack_types, pack_count);
+        whdtlv_free_pack_types(pack_types, pack_count);
     }
-    prettify_shutdown();
+    whdtlv_prettify_shutdown();
 
     return all_success ? 0 : 1;
 }
