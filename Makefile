@@ -66,6 +66,7 @@ SRC_FH := \
 	src_raw/filtering/tlv_select.c \
 	src_raw/filtering/tlv_results.c \
 	src_raw/filtering/profile_binder.c \
+	src_raw/filtering/selection_plan.c \
 	src_raw/filtering/whd_search.c \
 	src_raw/group_util.c \
 	src/platform/platform_io.c \

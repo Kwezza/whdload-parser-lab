@@ -366,6 +366,84 @@ static void apply_include_ids(WhdBoundField  *bf,
     }
 }
 
+/*------------------------------------------------------------------------*/
+/* Resolve a bucketed include list into bf->include_ids[] and            */
+/* bf->buckets[].                                                        */
+/*                                                                       */
+/* "/" splits the include list into buckets; "," separates tokens within */
+/* each bucket.  Empty buckets (e.g. from "AGA//OCS") are skipped.      */
+/*                                                                       */
+/* Returns  0 on success.                                                */
+/* Returns -1 if the number of non-empty buckets exceeds                 */
+/*            FP_MAX_BUCKETS_FIELD (caller must treat as a hard error).  */
+
+static int resolve_bucketed_include(const char    *val,
+                                    WhdBoundField *bf,
+                                    const char    *defs_dir,
+                                    const char    *csv_name,
+                                    int            has_csv)
+{
+    char     buf[512];
+    char    *p;
+    char    *slash;
+    char    *seg;
+    uint8_t  start_idx;
+    uint8_t  added;
+    uint8_t  room;
+    uint8_t  bkt;
+    uint16_t tmp_ids[PB_MAX_TOKENS];
+
+    if (!val || !*val) {
+        return 0;
+    }
+
+    strncpy(buf, val, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+    p   = buf;
+    bkt = 0;
+
+    while (*p) {
+        slash = strchr(p, '/');
+        if (slash) {
+            *slash = '\0';
+        }
+
+        seg = p;
+        pb_trim(seg);
+        start_idx = bf->include_count;
+
+        /* resolve comma-separated tokens within this bucket segment */
+        if (*seg) {
+            room  = (bf->include_count < PB_MAX_TOKENS)
+                    ? (uint8_t)(PB_MAX_TOKENS - bf->include_count)
+                    : 0u;
+            added = resolve_token_list(seg, tmp_ids, room,
+                                       defs_dir, csv_name, has_csv);
+            apply_include_ids(bf, tmp_ids, added);
+        }
+
+        /* record this bucket only if it produced at least one token */
+        if (bf->include_count > start_idx) {
+            if (bkt >= FP_MAX_BUCKETS_FIELD) {
+                return -1; /* too many buckets */
+            }
+            bf->buckets[bkt].start = start_idx;
+            bf->buckets[bkt].count = (uint8_t)(bf->include_count - start_idx);
+            bkt++;
+        }
+
+        if (slash) {
+            p = slash + 1;
+        } else {
+            break;
+        }
+    }
+
+    bf->bucket_count = bkt;
+    return 0;
+}
+
 /*========================================================================*/
 /* Public API                                                             */
 /*========================================================================*/
@@ -473,11 +551,18 @@ int whd_profile_load(const char       *path,
             has_csv = find_csv_for_field(rt, field_name, csv_name);
 
             if (strcmp(key, "include") == 0 && *val) {
-                added = resolve_token_list(val, tmp_ids, PB_MAX_TOKENS,
-                                           defs_dir,
-                                           has_csv ? csv_name : NULL,
-                                           has_csv);
-                apply_include_ids(bf, tmp_ids, added);
+                if (resolve_bucketed_include(val, bf,
+                                             defs_dir,
+                                             has_csv ? csv_name : NULL,
+                                             has_csv) < 0) {
+                    fprintf(stderr,
+                            "profile_binder: [Filter.%s] include= has more"
+                            " than %d slash-separated buckets -- profile"
+                            " rejected\n",
+                            field_name, (int)FP_MAX_BUCKETS_FIELD);
+                    fclose(f);
+                    return WHD_FILTER_ERR_PROFILE_LOAD;
+                }
 
                 /* While we have the csv_name handy, capture the default */
                 if (has_csv && !bf->has_default && defs_dir) {
@@ -593,6 +678,18 @@ void whd_profile_dump(const WhdBoundProfile *p)
                    (unsigned)k,
                    (unsigned)bf->include_ids[k],
                    (unsigned)k);
+        }
+        /* Bucket metadata */
+        if (bf->bucket_count > 1) {
+            uint8_t b;
+            printf("    buckets : %u (slash-separated)\n",
+                   (unsigned)bf->bucket_count);
+            for (b = 0u; b < bf->bucket_count; b++) {
+                printf("      bucket[%u] start=%u count=%u\n",
+                       (unsigned)b,
+                       (unsigned)bf->buckets[b].start,
+                       (unsigned)bf->buckets[b].count);
+            }
         }
         /* Exclude list */
         for (k = 0u; k < bf->exclude_count; k++) {

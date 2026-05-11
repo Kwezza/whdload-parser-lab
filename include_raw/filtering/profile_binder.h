@@ -32,6 +32,19 @@ extern "C" {
 #define PB_MAX_FIELDS   16   /* max filter fields per profile            */
 #define PB_MAX_TOKENS   32   /* max tokens per include or exclude list   */
 
+/* Selection-bucket limits (hard caps; violations are errors, not truncation) */
+#define FP_MAX_BUCKET_FIELDS    4  /* max fields per profile that may use "/" */
+#define FP_MAX_BUCKETS_FIELD    8  /* max "/"-separated buckets per include list */
+#define FP_MAX_SELECTION_LANES 32  /* max generated lanes (Cartesian product)  */
+
+/*------------------------------------------------------------------------*/
+/* One include selection bucket                                           */
+
+typedef struct WhdIncludeBucket {
+    uint8_t start;  /* index of first token in include_ids[]  */
+    uint8_t count;  /* number of tokens in this bucket        */
+} WhdIncludeBucket;
+
 /*------------------------------------------------------------------------*/
 /* One bound field                                                        */
 
@@ -43,10 +56,12 @@ typedef struct WhdBoundField {
     uint8_t  exclude_count;
     uint8_t  rank_by_id[256];           /* rank at position (id & 0xFF);
                                            0xFF = not in include list         */
-    uint16_t include_ids[PB_MAX_TOKENS];
-    uint16_t exclude_ids[PB_MAX_TOKENS];
-    int      has_default;               /* 1 if CSV defines a default row     */
-    uint16_t default_token_id;          /* numeric ID of the default token    */
+    uint16_t         include_ids[PB_MAX_TOKENS];
+    uint16_t         exclude_ids[PB_MAX_TOKENS];
+    WhdIncludeBucket buckets[FP_MAX_BUCKETS_FIELD]; /* slash-bucket metadata */
+    uint8_t          bucket_count;      /* 0=empty include, 1=comma-only, N=slash */
+    int              has_default;       /* 1 if CSV defines a default row     */
+    uint16_t         default_token_id;  /* numeric ID of the default token    */
 } WhdBoundField;
 
 /*------------------------------------------------------------------------*/

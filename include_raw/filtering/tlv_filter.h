@@ -62,11 +62,13 @@ typedef struct WhdFilterRequest {
 typedef struct WhdFilterResult {
     unsigned long total_variants;
     unsigned long total_groups;
-    unsigned long selected_count;          /* groups with a selected variant */
-    unsigned long rejected_variants_count; /* individual variants excluded by profile */
-    unsigned long rejected_groups_count;   /* groups where every variant was excluded */
+    unsigned long selected_count;           /* groups with >=1 lane satisfied */
+    unsigned long total_selected_variants;  /* sum of per-group lane winners */
+    unsigned long lane_count;               /* selection lanes used (>=1)    */
+    unsigned long rejected_variants_count;  /* individual variants excluded by profile */
+    unsigned long rejected_groups_count;    /* groups where every variant was excluded */
     unsigned long crc_mismatch_count;
-    unsigned long search_matched_groups;   /* groups matched by search_pattern; 0 if no search */
+    unsigned long search_matched_groups;    /* groups matched by search_pattern; 0 if no search */
     int           had_warnings;
 } WhdFilterResult;
 

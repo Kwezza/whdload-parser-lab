@@ -10,8 +10,11 @@ machine profile, and produces a filtered list of WHDLoad archive filenames.
 The TLV file produced by `dat_to_tlv` is a self-describing binary index of WHDLoad game
 metadata.  The filtering subsystem reads that file at runtime and answers one question:
 
-> Given this machine's capabilities and language preferences, which single archive is the best
-> version of each game?
+> Given this machine's capabilities and language preferences, which archive or archives should be
+> selected for each game group?
+>
+> By default the filter selects one archive per game group.  Profiles using slash buckets may
+> select multiple archives from the same group — one per active selection lane.
 
 The answer is a plain text file — one archive filename per line — ready to drive a WHDFetch
 download or installation script.
@@ -235,7 +238,8 @@ TLV     : output/Game(2026-04-17).tlv
 Profile : assets_raw/profiles/pal_aga_4mb.profile
 Variants: 3973
 Groups  : 2904
-Selected: 3
+Selected variants : 3
+Selected groups   : 3
 Variants rejected: 0
 Groups rejected  : 0
 Output  : output/filter_results.txt
@@ -245,10 +249,33 @@ Output  : output/filter_results.txt
 
 ## Stage 7 — Score and Select
 
-For each group the scorer evaluates every variant against the bound profile and picks the
-highest-scoring one.
+For each group the scorer evaluates every variant against the bound profile and selects the
+best variant for each active **selection lane**.
 
-**Scoring a variant:**
+### Building the selection plan
+
+Before any group is processed the profile binder produces a `WhdSelectionPlan`.  The plan is
+derived from any `[Filter.<field>]` sections whose `include=` list contains a `/` separator.
+Each `/`-separated chunk is a **bucket**; the lanes are the Cartesian product of all
+bucket lists across slash-enabled fields.
+
+Examples:
+
+| Profile snippet | Slash fields | Lane count |
+|---|---|---|
+| `include=AGA,ECS,OCS` (chipset only) | 0 | 1 (implicit) |
+| `include=AGA/ECS,OCS` (chipset only) | 1 | 2 |
+| `include=AGA/OCS` + `include=En/De` | 2 | 2 × 2 = 4 |
+
+A profile with no slash fields produces a single implicit lane whose selection criteria
+are identical to the old single-winner behaviour.  Existing comma-only profiles are
+never affected.
+
+**Hard limits:** `FP_MAX_BUCKET_FIELDS=4` slash-enabled fields, `FP_MAX_BUCKETS_FIELD=8`
+buckets per field, `FP_MAX_SELECTION_LANES=32` lanes total.  Exceeding any limit rejects
+the profile at load time with a clear error; lanes are never silently truncated.
+
+### Scoring a variant
 
 For each bound field the scorer iterates over every field entry the variant carries with the
 matching field ID.  Token ID values are stored as 4-byte little-endian uint32 (see endian table
@@ -264,43 +291,93 @@ When no value is present for a field the CSV default token is used if one was de
 all fields are evaluated the variant's `interior_fields` count is added as a small unconditional
 bonus that favours variants with more metadata.
 
-**Selection:**
+### Per-group selection
 
-The first variant in sorted order (lowest `original_index`) with the highest score is selected.
-Ties are broken by position — first-encountered wins — because the secondary sort key on
-`original_index` means equal-scored variants appear in the same order as they do in the TLV.
+For each group:
 
-A group where every variant is rejected by an exclude rule contributes one to `rejected_groups_count`
-and produces no output line.
+1. **Rejection pre-pass.**  Every variant is scored globally once.  Variants that are
+   excluded by any field are marked rejected and never reconsidered by any lane.
+
+2. **Per-lane selection.**  For each lane the scorer scans all non-rejected variants and
+   checks two additional conditions:
+   - **Lane eligibility:** the variant must have an effective token that falls inside each
+     bucket required by the lane.  The effective token may be an explicit TLV token or the
+     field's CSV default token when the variant lacks that field entirely.  A lane with no
+     requirements (single-lane plan) accepts every non-rejected variant.
+   - **Bucket-local rank:** for fields that have a lane requirement, rank is computed
+     relative to the bucket's own token list, not the full include list.  This ensures
+     that ECS in `include=AGA/ECS,OCS` (where ECS is bucket 1, rank 0) outranks OCS
+     within its own lane even though ECS has a lower global rank than AGA.
+     For ordinary (non-lane) fields `include_count` and `rank` refer to the full include
+     list.  For lane-required fields both values refer to the active bucket for that lane.
+   - **Duplicate suppression:** a variant already selected for an earlier lane of the
+     same group is skipped.  Each variant can appear at most once per group output.
+     Lane order follows the profile: buckets run left-to-right as written, and the
+     Cartesian product expands with the rightmost field varying fastest (lane 0 takes
+     bucket 0 of every slash field, lane 1 advances the last slash field first, and so on).
+   The highest-scoring eligible, non-duplicate variant is selected.  Ties are broken by
+   first-encountered order (lowest `original_index`).
+
+3. **Group accounting.**  A group contributes to `selected_groups` if at least one lane
+   produced a winner.  All lane winners are counted in `total_selected_variants`.
+   A group where every variant was rejected by an exclude rule contributes one to
+   `rejected_groups_count` and produces no output lines.
+
+### Backward compatibility
+
+Comma-only profiles produce a plan with exactly one implicit lane and zero lane
+requirements.  Every non-rejected variant is eligible for that lane and bucket-local rank
+equals global rank.  The net result is identical to the previous single-winner behaviour.
 
 ---
 
 ## Stage 8 — Write the Output File
 
-The output file contains one selected archive filename per line with no header:
+The output file contains one selected archive filename per line with no header.
+When multiple selection lanes are active there may be several lines per game group —
+one for each lane that found a winner:
 
 ```
-AlienBreed3_v1.0_AGA_En.lha
-Banshee_v1.0_AGA_En.lha
-CannonFodder_v1.0_AGA_En.lha
+AlienBreed_v1.0_AGA_En
+AlienBreed_v1.0_OCS_En
+Banshee_v1.0_AGA_En
+CannonFodder_v1.0_AGA_En
 ...
 ```
 
 Groups where all variants were excluded are silently skipped.  The file is a plain list suitable
 for direct use by a download or installation script.
 
-A summary is printed to the console (search line appears only when `--search` is active):
+A summary is printed to the console.  The search line appears only when `--search` is active.
+The `Selection lanes` line appears only when the profile has two or more lanes:
 
+**Single-lane (comma-only) profile:**
 ```
 CSV CRC: OK  (13 files checked)
 TLV     : output/Game(2026-04-17).tlv
 Profile : assets_raw/profiles/pal_aga_4mb.profile
 Variants: 3973
 Groups  : 2904
-Selected: 2904
+Selected variants : 2904
+Selected groups   : 2904
 Variants rejected: 0
 Groups rejected  : 0
 Output  : output/filter_results.txt
+```
+
+**Multi-lane (slash) profile:**
+```
+CSV CRC: OK  (13 files checked)
+TLV     : output/Game(2026-04-17).tlv
+Profile : assets_raw/profiles/multi_bucket_reference.profile
+Variants: 3973
+Groups  : 2904
+Selected variants : 2996
+Selected groups   : 2888
+Selection lanes   : 4
+Variants rejected: 155
+Groups rejected  : 16
+Output  : output/filter_results_multi.txt
 ```
 
 ---
@@ -357,6 +434,22 @@ big-endian encoding from the start; scalar framing fields remain LE.
 deterministic within a group.  The strict greater-than comparison in the selector (`score >
 best_score`) means the first variant in TLV order wins when scores are equal.  No additional
 tie-breaking logic is needed.
+
+**Slash buckets produce independent lanes, not an ordered fallback.**  Each lane is evaluated
+against the full set of non-rejected, non-duplicate variants.  A lane that finds no eligible
+variant is silently skipped; no error is raised and no other lane is substituted.  This design
+means the output for a group may have fewer lines than the total lane count when some lanes
+have no matching variants (e.g. the target chipset simply does not exist for that game).
+
+**Bucket-local rank keeps per-lane scoring fair.**  Within a lane, the rank of a token in a
+bucket is its 0-based position inside that bucket, not its position in the full include list.
+This prevents tokens in later buckets from being permanently outscored by tokens in earlier
+buckets when they compete inside the same lane.
+
+**Duplicate suppression is per-group.**  The set of already-selected variant indices is shared
+across all lanes for a single group.  A variant selected by lane 0 is excluded from lanes 1
+through N for that group.  The same variant can be selected in different groups without
+restriction.
 
 **The reusable subsystem has no I/O dependency.**  All printing is done by the harness caller.
 The reusable `src_raw/filtering/` modules never write to stdout or stderr, making them safe to

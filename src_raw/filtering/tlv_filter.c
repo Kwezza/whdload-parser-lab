@@ -168,7 +168,9 @@ int whd_filter_run(const WhdFilterRequest *request, WhdFilterResult *result)
     sel_built = 1;
 
     if (result) {
-        result->selected_count          = sel.selected_count;
+        result->selected_count           = sel.selected_count;
+        result->total_selected_variants  = sel.total_selected_variants;
+        result->lane_count               = sel.lane_count;
         result->rejected_variants_count  = sel.rejected_variants_count;
         result->rejected_groups_count    = sel.rejected_groups_count;
     }

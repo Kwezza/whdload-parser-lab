@@ -40,19 +40,28 @@ int tlv_results_write_file(const char            *output_path,
     }
 
     for (g = 0u; g < sel->count; g++) {
-        const WhdSelectEntry *entry    = &sel->entries[g];
-        const char           *filename;
+        const WhdSelectEntry *entry = &sel->entries[g];
+        uint8_t               li;
 
-        if (entry->all_rejected || entry->variant_index == WHD_NO_SELECTION) {
+        if (entry->all_rejected || entry->lane_selected_count == 0u) {
             continue;
         }
 
-        filename = arr->items[entry->variant_index].filename;
-        if (!filename) {
-            continue;
-        }
+        for (li = 0u; li < entry->lane_selected_count; li++) {
+            unsigned long        arr_idx  = entry->selected_indices[li];
+            const char          *filename;
 
-        fprintf(f, "%s\n", filename);
+            if (arr_idx == WHD_NO_SELECTION) {
+                continue;
+            }
+
+            filename = arr->items[arr_idx].filename;
+            if (!filename) {
+                continue;
+            }
+
+            fprintf(f, "%s\n", filename);
+        }
     }
 
     fclose(f);
@@ -73,7 +82,11 @@ void tlv_results_print_summary(const char            *tlv_path,
     printf("Profile : %s\n",  profile_path ? profile_path : "(none)");
     printf("Variants: %lu\n", result->total_variants);
     printf("Groups  : %lu\n", result->total_groups);
-    printf("Selected: %lu\n",          result->selected_count);
+    printf("Selected variants : %lu\n", result->total_selected_variants);
+    printf("Selected groups   : %lu\n", result->selected_count);
+    if (result->lane_count > 1u) {
+        printf("Selection lanes   : %lu\n", result->lane_count);
+    }
     printf("Variants rejected: %lu\n",  result->rejected_variants_count);
     printf("Groups rejected  : %lu\n",  result->rejected_groups_count);
     if (result->had_warnings) {

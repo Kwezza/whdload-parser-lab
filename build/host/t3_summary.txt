@@ -3,7 +3,8 @@ TLV     : tests\filtering\tiny_games_fallback.tlv
 Profile : tests\filtering\profile_aga_en.profile
 Variants: 11
 Groups  : 5
-Selected: 5
+Selected variants : 5
+Selected groups   : 5
 Variants rejected: 3
 Groups rejected  : 0
 Output  : build\host\t3_out.txt

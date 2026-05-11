@@ -20,6 +20,7 @@
 #include <filtering/tlv_variant.h>
 #include <filtering/tlv_group.h>
 #include <filtering/profile_binder.h>
+#include <filtering/selection_plan.h>
 #include <filtering/whd_search.h>
 
 #ifdef __cplusplus
@@ -35,17 +36,23 @@ extern "C" {
 /* Per-group selection result                                             */
 
 typedef struct WhdSelectEntry {
-    unsigned long variant_index; /* index in WhdVariantArray; WHD_NO_SELECTION if none */
-    unsigned long score;
-    int           all_rejected;  /* 1 if every variant was excluded by profile */
+    unsigned long variant_index; /* backward-compat: first lane's winner (selected_indices[0]),
+                                    or WHD_NO_SELECTION if no lane was satisfied              */
+    unsigned long score;         /* score of the first-lane winner                            */
+    int           all_rejected;  /* 1 if every variant was excluded by profile                */
+    /* Multi-lane results (one entry per selection lane) */
+    unsigned long selected_indices[FP_MAX_SELECTION_LANES]; /* WHD_NO_SELECTION = no winner    */
+    uint8_t       lane_selected_count;                      /* lanes that produced a winner    */
 } WhdSelectEntry;
 
 typedef struct WhdSelectResult {
-    WhdSelectEntry *entries;          /* one entry per group */
-    unsigned long   count;            /* == gs->group_count  */
-    unsigned long   selected_count;   /* groups with at least one accepted variant */
-    unsigned long   rejected_variants_count; /* individual variants excluded by profile */
-    unsigned long   rejected_groups_count;   /* groups where every variant was excluded */
+    WhdSelectEntry *entries;                 /* one entry per group                          */
+    unsigned long   count;                   /* == gs->group_count                           */
+    unsigned long   selected_count;          /* groups with at least one lane satisfied      */
+    unsigned long   total_selected_variants; /* sum of lane_selected_count across all groups */
+    unsigned long   lane_count;              /* lane count from the selection plan           */
+    unsigned long   rejected_variants_count; /* unique variants excluded by profile          */
+    unsigned long   rejected_groups_count;   /* groups where every variant was excluded      */
 } WhdSelectResult;
 
 /* WhdBoundProfile is now defined in profile_binder.h (Stage E). */

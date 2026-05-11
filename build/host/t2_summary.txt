@@ -3,7 +3,8 @@ TLV     : tests\filtering\tiny_games.tlv
 Profile : tests\filtering\profile_ocs_only.profile
 Variants: 11
 Groups  : 5
-Selected: 2
+Selected variants : 2
+Selected groups   : 2
 Variants rejected: 8
 Groups rejected  : 3
 Output  : build\host\t2_out.txt

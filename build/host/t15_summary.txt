@@ -1,12 +1,10 @@
 CSV CRC: OK  (3 files checked)
-Search         : zzz_nomatch*
-Matched groups : 0
 TLV     : tests\filtering\tiny_games.tlv
 Profile : tests\filtering\profile_aga_en.profile
 Variants: 11
 Groups  : 5
-Selected variants : 0
-Selected groups   : 0
-Variants rejected: 0
+Selected variants : 5
+Selected groups   : 5
+Variants rejected: 3
 Groups rejected  : 0
-Output  : build\host\t7_out.txt
+Output  : nul

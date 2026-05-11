@@ -90,7 +90,95 @@ The token values you supply are looked up against the corresponding CSV definiti
 the list using a hash of its name so it can still match against TLV records that were also
 hashed the same way.
 
-**Hard limits (from `filter_profile.h`):**
+---
+
+### Selection Buckets — Slash Syntax
+
+By default a comma-separated include list selects **one** best variant per game group.  The
+slash character `/` divides an include list into **selection buckets**.  Each bucket produces
+an independent selection lane: the selector tries to find the best variant for each lane and
+writes all winners to the output.
+
+```ini
+[Filter.chipset]
+include=AGA/ECS,OCS
+```
+
+| Fragment | Bucket | Meaning |
+|----------|--------|---------|
+| `AGA` | 0 | prefer AGA; one winner per group |
+| `ECS,OCS` | 1 | prefer ECS over OCS; one more winner per group |
+
+This produces **up to two filenames per game group** — the best AGA and the best ECS/OCS
+variant.
+
+**Comma inside a bucket** still encodes priority (left = highest rank within that bucket):
+
+```ini
+include=AGA/ECS,OCS
+```
+
+Here ECS outranks OCS for the lane-1 selection.  Rank is always relative to the bucket,
+not the full include list.
+
+**Multiple slash fields — Cartesian product:**
+
+When two or more fields use `/`, the lanes are the Cartesian product of their bucket lists:
+
+```ini
+[Filter.chipset]
+include=AGA/ECS,OCS    <- 2 buckets
+
+[Filter.language]
+include=En/De          <- 2 buckets
+```
+
+Lanes produced (2 × 2 = 4):
+
+| Lane | chipset requirement | language requirement |
+|------|--------------------|-----------------------|
+| 0 | AGA | En |
+| 1 | AGA | De |
+| 2 | ECS or OCS | En |
+| 3 | ECS or OCS | De |
+
+For each game group the selector independently tries to fill each lane.
+
+**Exclude interaction:**  `exclude=` is evaluated before lane scoring.  A variant excluded
+by any field is removed from every lane.  Exclusion always beats inclusion:
+
+```ini
+include=AGA/OCS
+exclude=OCS
+```
+
+OCS variants are rejected globally.  Lane 1 (OCS bucket) always produces no winner.
+
+**Duplicate suppression:**  A variant can appear at most once per group output.  If lane 0
+selects `Banshee_v1.0_AGA_En`, no subsequent lane for that group will select the same
+filename.
+
+**Missing-lane behaviour:**  A lane that finds no eligible, non-duplicate variant is
+silently skipped.  No error is raised.  The output for a group may have fewer lines than
+the total lane count.
+
+**Comma-only profiles are unaffected:**  A profile with no `/` in any include list produces
+a single implicit lane and behaves identically to the previous single-winner algorithm.
+
+**Hard limits** (compile-time constants in `include_raw/filtering/profile_binder.h`):
+
+| Constant | Value | Meaning |
+|----------|-------|---------|
+| `FP_MAX_BUCKET_FIELDS` | 4 | Maximum fields that may use `/` in one profile |
+| `FP_MAX_BUCKETS_FIELD` | 8 | Maximum slash-separated buckets per include list |
+| `FP_MAX_SELECTION_LANES` | 32 | Maximum generated lanes (product of all bucket counts) |
+
+Exceeding any limit rejects the profile at load time with a clear error.  Lanes are never
+silently truncated.
+
+---
+
+**Hard limits (token counts, from `profile_binder.h`):**
 
 | Constant | Value | Meaning |
 |----------|-------|---------|
@@ -100,6 +188,8 @@ hashed the same way.
 
 Exceeding these limits causes the excess tokens to be silently discarded and
 `ProfileMeta.had_warnings` is set to `true`.
+See [Selection Buckets](#selection-buckets--slash-syntax) above for the bucket-specific
+limits (`FP_MAX_BUCKET_FIELDS`, `FP_MAX_BUCKETS_FIELD`, `FP_MAX_SELECTION_LANES`).
 
 ---
 
@@ -127,13 +217,14 @@ registry; unrecognised names are ignored and set `had_warnings`.
 
 ## Built-in Profiles
 
-Three profiles are shipped in `assets_raw/profiles/`:
+Four profiles are shipped in `assets_raw/profiles/`:
 
 | File | id | Description |
 |------|----|-------------|
 | `pal_aga_4mb.profile` | `pal_aga_4mb` | Standard PAL AGA 4MB system (chipset 150, language 120, memory 100) |
 | `chipset_aga_only.profile` | `chipset_aga_only` | Chipset filter only; AGA/ECS/OCS accepted, all weights on chipset |
 | `chipset_legacy_only.profile` | `chipset_legacy_only` | ECS/OCS only; AGA explicitly excluded |
+| `multi_bucket_reference.profile` | `multi_bucket_reference` | Annotated reference showing slash bucket syntax (AGA/ECS,OCS × En/De, 4 lanes) |
 
 ---
 
@@ -479,3 +570,8 @@ weight.memory=0
 | Variant's token matches an exclude entry | Variant immediately rejected (score = 0) |
 | Two variants with identical scores | First-encountered variant wins (tie is not broken by rank) |
 | `include_count` exceeds `FP_MAX_INCLUDE` (32) | Excess tokens discarded; `had_warnings=true` |
+| `include=AGA/ECS,OCS` — slash in include | Two selection lanes: lane 0 selects best AGA, lane 1 selects best ECS or OCS |
+| `include=AGA/OCS` + `exclude=OCS` | OCS excluded globally; lane 1 always empty; only AGA selected |
+| `include=AGA/AGA,OCS` — duplicate in bucket 1 | AGA already selected in lane 0; lane 1 skips it and selects OCS instead |
+| More than 8 buckets in one field | Profile rejected at load time with an error message |
+| Cartesian product exceeds 32 lanes | Profile rejected at load time with an error message |

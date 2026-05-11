@@ -1,0 +1,11 @@
+CSV CRC: OK  (3 files checked)
+TLV     : tests\filtering\tiny_games.tlv
+Profile : tests\filtering\profile_bucket_dup.profile
+Variants: 11
+Groups  : 5
+Selected variants : 10
+Selected groups   : 5
+Selection lanes   : 2
+Variants rejected: 0
+Groups rejected  : 0
+Output  : build\host\t13_out.txt

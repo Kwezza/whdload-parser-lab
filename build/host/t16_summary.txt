@@ -1,0 +1,3 @@
+CSV CRC: OK  (3 files checked)
+profile_binder: [Filter.chipset] include= has more than 8 slash-separated buckets -- profile rejected
+ERROR: unable to load profile: tests\filtering\profile_bucket_overflow.profile
