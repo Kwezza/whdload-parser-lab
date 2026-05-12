@@ -11,7 +11,7 @@ ifeq ($(TARGET),amiga)
 	CC := $(VBCC)/bin/vc
 	CFLAGS := -DPLATFORM_AMIGA +aos68k -cpu=68000 -O2 \
 		-I$(AMIGA_INCLUDES) \
-		-Iinclude -Iinclude/platform -Iinclude_raw -Iapp_src
+		-Iinclude -Isrc
 	LDFLAGS := -lamiga -lauto
 	BUILD_DIR := build/amiga
 	BIN := $(BUILD_DIR)/dat_to_tlv
@@ -20,7 +20,7 @@ ifeq ($(TARGET),amiga)
 	RUN_CMD = @echo Amiga binary built: $(subst /,\,$(BIN))
 else
 	CC := gcc
-	CFLAGS := -DPLATFORM_HOST=1 -DHOSTBUILD -std=c99 -O2 -Wall -Wextra -Iinclude -Iinclude/platform -Iinclude_raw -Iapp_src
+	CFLAGS := -DPLATFORM_HOST=1 -DHOSTBUILD -std=c99 -O2 -Wall -Wextra -Iinclude -Isrc
 	LDFLAGS :=
 	BUILD_DIR := build/host
 	BIN := $(BUILD_DIR)/dat_to_tlv.exe
@@ -38,26 +38,26 @@ RMDIR_CMD = if exist "$(subst /,\,$(1))" rmdir /s /q "$(subst /,\,$(1))"
 DEL_CMD = if exist "$(subst /,\,$(1))" del /q "$(subst /,\,$(1))"
 
 SRC := \
-	app_src/main.c \
-	app_src/dat_parser_minimal.c \
-	src_raw/error_handling.c \
-	src_raw/field_registry.c \
-	src_raw/tlv_profile.c \
-	src_raw/csv_cache.c \
-	src_raw/filename_processor.c \
-	src_raw/tlv_builder.c \
-	src_raw/group_util.c \
-	src_raw/whdtlv_integration.c \
-	src/platform/platform_io.c \
-	src/platform/platform_string.c \
-	src/io/writeLog.c \
-	src/io/pack_types_loader.c \
-	src/utils/prettify.c \
-	src/utils/crc32.c
+	tools_src/dat_to_tlv_main.c \
+	src/whdtlv/core/dat_parser_minimal.c \
+	src/whdtlv/core/error_handling.c \
+	src/whdtlv/core/field_registry.c \
+	src/whdtlv/core/tlv_profile.c \
+	src/whdtlv/core/csv_cache.c \
+	src/whdtlv/core/filename_processor.c \
+	src/whdtlv/core/tlv_builder.c \
+	src/whdtlv/core/group_util.c \
+	src/whdtlv/core/whdtlv_integration.c \
+	src/whdtlv/platform/platform_io.c \
+	src/whdtlv/platform/platform_string.c \
+	src/whdtlv/io/writeLog.c \
+	src/whdtlv/io/pack_types_loader.c \
+	src/whdtlv/utils/prettify.c \
+	src/whdtlv/utils/crc32.c
 
 OBJ := $(SRC:%.c=$(BUILD_DIR)/%.o)
 
-DEMO_OBJ := $(filter-out $(BUILD_DIR)/app_src/main.o,$(OBJ)) \
+DEMO_OBJ := $(filter-out $(BUILD_DIR)/tools_src/dat_to_tlv_main.o,$(OBJ)) \
             $(BUILD_DIR)/tools/tlv_demo/tlv_demo.o
 
 ifeq ($(TARGET),amiga)

@@ -1,1 +1,0 @@
-ERROR: invalid TLV header: tests\filtering\tlv\tiny_bad_no_fieldmap.tlv

@@ -1,3 +1,0 @@
-CSV CRC: OK  (5 files checked)
-selection_plan: more than 4 fields use slash buckets -- profile rejected
-ERROR: unable to load profile

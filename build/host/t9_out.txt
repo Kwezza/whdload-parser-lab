@@ -1,7 +1,0 @@
-AlienBreed_v1.0_AGA_En
-AlienBreed_v1.0_OCS_En
-Banshee_v1.0_AGA_En
-CannonFodder_v1.0_AGA_En
-DynaBlaster_v1.0a_AGA_En
-EaglesRider_v1.0_AGA
-EaglesRider_v1.0_OCS

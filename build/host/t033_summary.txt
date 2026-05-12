@@ -1,3 +1,0 @@
-CSV CRC: OK  (5 files checked)
-selection_plan: Cartesian product of slash buckets exceeds 32 lanes -- profile rejected
-ERROR: unable to load profile

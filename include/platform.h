@@ -12,9 +12,9 @@
 #define PLATFORM_H
 
 /* Include platform I/O wrappers */
-#include "platform/platform_io.h"
+#include "whdtlv/platform/platform_io.h"
 /* Include memory allocation wrappers */
-#include "platform/platform_mem.h"
+#include "whdtlv/platform/platform_mem.h"
 
 /*------------------------------------------------------------------------*/
 /* Platform-specific includes and definitions                            */
