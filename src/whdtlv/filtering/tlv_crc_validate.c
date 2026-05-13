@@ -52,10 +52,20 @@ static int file_crc32(const char *path, uint32_t *out_crc)
         return WHD_FILTER_ERR_CSV_MISSING;
     }
 
-    crc = crc32_init();
+    crc = whdtlv_crc32_init();
     while (fgets(line, (int)sizeof(line), f)) {
-        crc = crc32_update(crc, (const unsigned char *)line,
-                           (size_t)strlen(line));
+        size_t len = strlen(line);
+        /*
+         * Normalise CRLF -> LF before hashing so the computed CRC matches
+         * the value the builder embedded regardless of platform.
+         * On Windows, text-mode fgets already strips \r; this branch only
+         * fires on platforms (e.g. AmigaOS) where text mode does not.
+         */
+        if (len >= 2u && line[len - 2u] == '\r' && line[len - 1u] == '\n') {
+            line[len - 2u] = '\n';
+            len--;
+        }
+        crc = whdtlv_crc32_update(crc, (const unsigned char *)line, len);
     }
 
     if (ferror(f)) {
@@ -64,7 +74,7 @@ static int file_crc32(const char *path, uint32_t *out_crc)
     }
 
     fclose(f);
-    *out_crc = crc32_finalize(crc);
+    *out_crc = whdtlv_crc32_finalize(crc);
     return WHD_FILTER_OK;
 }
 

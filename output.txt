@@ -1,0 +1,63 @@
+whdtlv public filter facade - test suite
+TLV  : output/Game(2026-04-17).tlv
+Defs : assets_raw/defs
+Prof : assets_raw/profiles/pal_aga_4mb.profile
+
+--- Test 1: Normal profile, no search ---
+  PASS: returns WHDTLV_OK
+  PASS: results.count > 0
+  PASS: count == selected_variants
+  PASS: groups_total > 0
+  PASS: no-search: matched_groups == groups_total
+  PASS: all returned strings non-NULL and non-empty
+  (variants=3973 groups=2904 selected=2904 lanes=1)
+  PASS: free resets struct to empty state
+
+--- Test 2: Search match (lotus*) ---
+  PASS: returns WHDTLV_OK
+  PASS: matched_groups > 0
+  PASS: results.count > 0
+  (matched_groups=3 selected=3)
+
+--- Test 3: Search no-match (thisshouldnotmatchanything*) ---
+  PASS: returns WHDTLV_OK
+  PASS: results.count == 0
+  PASS: matched_groups == 0
+  PASS: items is NULL
+  PASS: reserved is NULL
+  PASS: free on empty result does not crash
+
+--- Test 4: Multi-lane profile (multi_bucket_reference) ---
+  PASS: returns WHDTLV_OK
+  PASS: selection_lanes > 1
+  PASS: count == selected_variants
+  (lanes=4 selected=2996)
+
+--- Test 5: Invalid profile path ---
+  PASS: returns failure code
+  PASS: results.count == 0 after failure
+  PASS: items is NULL after failure
+  PASS: reserved is NULL after failure
+  (rc=-6)
+  PASS: free on failure-state struct does not crash
+
+--- Test 6: whdtlv_string_list_free() safety ---
+  PASS: free of zeroed struct is safe
+  PASS: free(NULL) is safe
+  PASS: reserved is NULL after first free
+  PASS: double-free via zeroed struct is safe
+
+--- Test 7: whdtlv_filter_to_file() wrapper ---
+  PASS: returns WHDTLV_OK
+  PASS: file line count == selected_variants
+  (lines=2904 selected=2904)
+
+--- Test 8: Empty search pattern treated as no search ---
+  PASS: returns WHDTLV_OK
+  PASS: empty pattern: matched_groups == groups_total
+  (groups_total=2904 matched_groups=2904 selected=2904)
+  PASS: free after empty-pattern run does not crash
+
+========================================
+Results: 33 passed, 0 failed
+========================================

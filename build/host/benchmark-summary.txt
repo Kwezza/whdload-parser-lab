@@ -31,7 +31,7 @@ Processed:    128
 Successful:   128
 Errors:       0
 TLV entries:  582
-TLV build time: 3 ms
+TLV build time: 4 ms
 TLV save time: 0 ms
 
 DAT input:    assets_raw/Dats/Game(2026-04-17).dat
@@ -43,8 +43,8 @@ Processed:    3973
 Successful:   3973
 Errors:       0
 TLV entries:  19917
-TLV build time: 13 ms
-TLV save time: 3 ms
+TLV build time: 15 ms
+TLV save time: 2 ms
 
 DAT input:    assets_raw/Dats/Mags(2025-07-24).dat
 Output TLV:   output/Mags(2025-07-24).tlv

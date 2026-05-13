@@ -15,6 +15,7 @@
 #define FILTERING_TLV_RESULTS_H
 
 #include "platform.h"
+#include "whdtlv/whdtlv.h"
 #include "whdtlv/filtering/tlv_filter.h"
 #include "whdtlv/filtering/tlv_variant.h"
 #include "whdtlv/filtering/tlv_group.h"
@@ -35,6 +36,22 @@ int tlv_results_write_file(const char            *output_path,
                            const WhdSelectResult *sel,
                            const WhdGroupSet     *gs,
                            const WhdVariantArray *arr);
+
+/*
+ * Collect selected archive filenames into an in-memory list.
+ *
+ * Uses a single contiguous allocation so the pointer table and all string
+ * data share one block.  list->reserved owns the allocation; list->items
+ * points into it.  Free with whdtlv_string_list_free() (Phase 4).
+ *
+ * Returns WHD_FILTER_OK on success (including empty result set).
+ * On failure the function returns a negative error code and leaves *list
+ * in a safe empty state.
+ */
+int tlv_results_collect_list(const WhdSelectResult *sel,
+                              const WhdGroupSet     *gs,
+                              const WhdVariantArray *arr,
+                              WhdTlvStringList      *list);
 
 /*
  * Print the standard console summary to stdout.

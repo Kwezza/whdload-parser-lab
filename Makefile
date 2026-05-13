@@ -53,7 +53,19 @@ SRC := \
 	src/whdtlv/io/writeLog.c \
 	src/whdtlv/io/pack_types_loader.c \
 	src/whdtlv/utils/prettify.c \
-	src/whdtlv/utils/crc32.c
+	src/whdtlv/utils/crc32.c \
+	src/whdtlv/filtering/profile_binder.c \
+	src/whdtlv/filtering/selection_plan.c \
+	src/whdtlv/filtering/tlv_crc_validate.c \
+	src/whdtlv/filtering/tlv_filter.c \
+	src/whdtlv/filtering/tlv_group.c \
+	src/whdtlv/filtering/tlv_reader.c \
+	src/whdtlv/filtering/tlv_results.c \
+	src/whdtlv/filtering/tlv_runtime.c \
+	src/whdtlv/filtering/tlv_select.c \
+	src/whdtlv/filtering/tlv_variant.c \
+	src/whdtlv/filtering/whd_search.c \
+	src/whdtlv/whdtlv_filter_facade.c
 
 OBJ := $(SRC:%.c=$(BUILD_DIR)/%.o)
 
@@ -66,6 +78,20 @@ else
 	BIN_DEMO := $(BUILD_DIR)/tlv_demo.exe
 endif
 
+ifeq ($(TARGET),amiga)
+	BIN_TEST_FILTER := $(BUILD_DIR)/test_filter_facade
+	TEST_FILTER_RUN := @echo Amiga test binary built: $(subst /,\,$(BUILD_DIR))\test_filter_facade -- run on device with STACK 100000
+else
+	BIN_TEST_FILTER := $(BUILD_DIR)/test_filter_facade.exe
+	TEST_FILTER_RUN := $(subst /,\,$(BIN_TEST_FILTER))
+endif
+
+# Objects shared by all binaries (everything except the main entry points)
+LIB_OBJ := $(filter-out $(BUILD_DIR)/tools_src/dat_to_tlv_main.o,$(OBJ))
+
+TEST_FILTER_OBJ := $(LIB_OBJ) \
+                   $(BUILD_DIR)/tests/filtering/test_filter_facade.o
+
 
 help:
 	@echo dat_to_tlv standalone build targets
@@ -77,6 +103,7 @@ help:
 	@echo   make amiga           - Shortcut for Amiga build
 	@echo   make run             - Run host binary when TARGET=host
 	@echo   make demo            - Build the facade demo program -^> build\host\tlv_demo.exe
+	@echo   make test-filter     - Build and run the public filter facade tests
 	@echo   make clean           - Remove build output for current TARGET and default TLV output
 	@echo.
 	@echo Variables:
@@ -104,3 +131,10 @@ $(BIN_DEMO): $(DEMO_OBJ)
 clean:
 	@$(call RMDIR_CMD,$(BUILD_DIR))
 	@$(call DEL_CMD,output/Games(19-05-2025).tlv)
+
+test-filter: $(BIN_TEST_FILTER)
+	$(TEST_FILTER_RUN)
+
+$(BIN_TEST_FILTER): $(TEST_FILTER_OBJ)
+	@$(call MKDIR_CMD,$(BUILD_DIR))
+	$(CC) $(CFLAGS) -o $@ $(TEST_FILTER_OBJ) $(LDFLAGS)
