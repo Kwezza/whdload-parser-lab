@@ -58,6 +58,14 @@ Prof : assets_raw/profiles/pal_aga_4mb.profile
   (groups_total=2904 matched_groups=2904 selected=2904)
   PASS: free after empty-pattern run does not crash
 
+--- Test 9: NULL and empty profile_path (default scoring) ---
+  PASS: NULL profile: returns WHDTLV_OK
+  PASS: NULL profile: results non-empty
+  PASS: empty-string profile: returns WHDTLV_OK
+  PASS: empty-string profile: results non-empty
+  PASS: NULL and empty-string profile produce same count
+  (count_null=2904 count_empty=2904)
+
 ========================================
-Results: 33 passed, 0 failed
+Results: 38 passed, 0 failed
 ========================================

@@ -351,6 +351,59 @@ static void test8_empty_search_pattern(void)
 }
 
 /*========================================================================*/
+/* Test 9: NULL and empty profile_path (built-in default scoring)         */
+/*========================================================================*/
+
+static void test9_null_and_empty_profile(void)
+{
+    WhdTlvFilterOptions opts;
+    WhdTlvFilterSummary summary_a;
+    WhdTlvFilterSummary summary_b;
+    WhdTlvStringList    results_a;
+    WhdTlvStringList    results_b;
+    unsigned int        count_a;
+    unsigned int        count_b;
+    int                 rc;
+
+    print_sep("Test 9: NULL and empty profile_path (default scoring)");
+
+    /* Sub-run A: profile_path = NULL */
+    whdtlv_filter_options_defaults(&opts);
+    memset(&summary_a, 0, sizeof(summary_a));
+    memset(&results_a, 0, sizeof(results_a));
+
+    rc = whdtlv_filter_to_list(
+        GAMES_TLV, DEFS_DIR, NULL,
+        NULL, &opts, &results_a, &summary_a);
+
+    CHECK(rc == WHDTLV_OK,       "NULL profile: returns WHDTLV_OK");
+    CHECK(results_a.count > 0u,  "NULL profile: results non-empty");
+    count_a = results_a.count;
+
+    whdtlv_string_list_free(&results_a);
+
+    /* Sub-run B: profile_path = "" */
+    whdtlv_filter_options_defaults(&opts);
+    memset(&summary_b, 0, sizeof(summary_b));
+    memset(&results_b, 0, sizeof(results_b));
+
+    rc = whdtlv_filter_to_list(
+        GAMES_TLV, DEFS_DIR, "",
+        NULL, &opts, &results_b, &summary_b);
+
+    CHECK(rc == WHDTLV_OK,       "empty-string profile: returns WHDTLV_OK");
+    CHECK(results_b.count > 0u,  "empty-string profile: results non-empty");
+    count_b = results_b.count;
+
+    /* Both must take the same has_profile=0 branch -> identical count */
+    CHECK(count_a == count_b,    "NULL and empty-string profile produce same count");
+
+    printf("  (count_null=%u count_empty=%u)\n", count_a, count_b);
+
+    whdtlv_string_list_free(&results_b);
+}
+
+/*========================================================================*/
 /* main                                                                   */
 /*========================================================================*/
 
@@ -369,6 +422,7 @@ int main(void)
     test6_free_safety();
     test7_filter_to_file();
     test8_empty_search_pattern();
+    test9_null_and_empty_profile();
 
     printf("\n========================================\n");
     printf("Results: %d passed, %d failed\n", g_pass, g_fail);

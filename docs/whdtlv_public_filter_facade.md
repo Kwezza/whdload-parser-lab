@@ -76,6 +76,7 @@ directly by embedding code.
 ## Minimal Usage Example
 
 ```c
+#include <string.h>
 #include "whdtlv/whdtlv.h"
 
 int run_filter(void)
@@ -87,6 +88,7 @@ int run_filter(void)
     int                 rc;
 
     whdtlv_filter_options_defaults(&opts);
+    memset(&results, 0, sizeof(results));
 
     rc = whdtlv_filter_to_list(
         "PROGDIR:Games.tlv",
@@ -145,6 +147,25 @@ considered before profile scoring selects variants inside those groups.
 
 Profile scoring still selects the best variant or variants inside each matched
 group.  The search does not bypass or replace profile selection.
+
+---
+
+## `profile_path` Semantics
+
+`profile_path` controls which scoring profile is applied to variant selection.
+It is optional; the pipeline runs without a profile file.
+
+| Value | Behaviour |
+|---|---|
+| `NULL` | No profile loaded; built-in default scoring is used (one variant selected per group by internal rank). |
+| `""` (empty string) | Same as `NULL`; no profile is loaded. |
+| non-empty valid path | Loads the specified `.profile` file and applies it to variant scoring. |
+| non-empty invalid path | Profile file cannot be opened or parsed; returns `WHDTLV_FILTER_ERR_PROFILE` (−6). |
+
+The implementation test is `if (profile_path && profile_path[0] != '\0')`, so
+both `NULL` and `""` are treated identically — they skip the profile-load step
+and leave `has_profile = 0`.  When `has_profile == 0`, `tlv_select_run()` is
+called with a `NULL` profile pointer and applies built-in default selection.
 
 ---
 
@@ -265,7 +286,7 @@ regression tests; prefer `whdtlv_filter_to_list()` in embedded code.
 
 ## Amiga Validation Record
 
-**Date:** 2026-05-13  
+**Date:** 2026-05-14  
 **Binary:** `build/amiga/test_filter_facade` (vbcc, 68000, C89)  
 **TLV:** `output/Game(2026-04-17).tlv` (3 973 variants, 2 904 groups)  
 **Defs:** `assets_raw/defs`  
@@ -273,7 +294,7 @@ regression tests; prefer `whdtlv_filter_to_list()` in embedded code.
 **Stack:** `STACK 100000`
 
 ```
-Results: 33 passed, 0 failed
+Results: 38 passed, 0 failed
 ```
 
 | Test | Description | Result |
@@ -286,6 +307,7 @@ Results: 33 passed, 0 failed
 | 6 | `whdtlv_string_list_free()` safety — NULL, zeroed, double-free | PASS (4 checks) |
 | 7 | `whdtlv_filter_to_file()` wrapper — file line count matches | PASS (2 checks) |
 | 8 | Empty search pattern (`""`) treated as no search | PASS (3 checks) |
+| 9 | `profile_path == NULL` and `""` — same `has_profile = 0` branch, counts equal | PASS (5 checks) |
 
 **Known Amiga behaviour note:** CSV files have Windows CRLF line endings.
 `tlv_crc_validate.c` normalises `\r\n` → `\n` before hashing so the
