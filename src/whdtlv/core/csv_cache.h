@@ -200,8 +200,7 @@ const char *csv_cache_find_token_source(GlobalCSVManager *manager, const char *t
  * - This performs a linear scan over the cache's hash table and is O(N),
  *   intended for diagnostics and preview output, not hot paths.
  */
-/* csv_cache_reverse_lookup: declaration removed in Phase 2 header hygiene
- * (2026-05-11). Definition retained in csv_cache.c. */
+const char *csv_cache_reverse_lookup(GlobalCSVManager *manager, const char *csv_name, uint32_t id, bool want_long);
 
 /**
  * @brief Get default token id (and flag) for a CSV cache

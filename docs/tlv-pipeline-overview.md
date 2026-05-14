@@ -92,6 +92,46 @@ value pairs.
 
 ---
 
+### Compact Multilanguage Token Rule
+
+Language tokens in WHDLoad filenames appear in two forms:
+
+**Single-language token** — exactly two characters matching a Language.csv entry, for example
+`_De_` (German) or `_En_` (English). The token is accepted as a language if and only if the
+whole two-character token is present in Language.csv.
+
+**Compact multilingual token** — a run of two-character language codes joined without separators,
+for example `DeEsFrIt` (German, Spanish, French, Italian). A token is accepted as a compact
+multilingual sequence if and only if:
+
+1. the token length is even and at least 4 characters;
+2. the token can be split cleanly into 2-character chunks with no remainder;
+3. every 2-character chunk resolves to a known entry in Language.csv;
+4. no unmatched characters remain.
+
+If any chunk is absent from Language.csv the **whole token is rejected** as a language token.
+Partial matches are not accepted — this prevents arbitrary tokens from yielding embedded false
+language codes.
+
+**Examples:**
+
+| Token | Outcome | Reason |
+|---|---|---|
+| `De` | German | exact single-code match |
+| `En` | English | exact single-code match |
+| `DeEsFrIt` | De; Es; Fr; It | all four 2-char chunks are in Language.csv |
+| `DeFr` | De; Fr | both chunks resolve |
+| `EasyPlay` | *rejected* | chunk `Ea` is not in Language.csv |
+| `Infogrames` | *rejected* | chunk `In` is not in Language.csv |
+| `DeXxFr` | *rejected* | chunk `Xx` is not in Language.csv; De and Fr are not extracted |
+| `EnFrX` | *rejected* | odd length (5); cannot be split into 2-char chunks |
+
+This rule is implemented in `filename_processor.c` by the static helper
+`is_compact_language_token`, which is called from `language_parser_parse_token`. The function
+short-circuits immediately on the first unknown chunk, so no unnecessary lookups are made.
+
+---
+
 ## Stage 5 — Assemble the TLV Output
 
 The individual records produced for each filename are assembled into a single TLV structure. Each

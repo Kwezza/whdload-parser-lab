@@ -15,7 +15,7 @@
  *   2  whdtlv_build_from_dat returned an error
  */
 
-#include <integration/whdtlv_integration.h>
+#include <whdtlv/whdtlv.h>
 
 #include <stdio.h>
 #include <stdlib.h>

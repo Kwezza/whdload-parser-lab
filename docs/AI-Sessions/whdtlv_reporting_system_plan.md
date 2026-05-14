@@ -699,22 +699,4 @@ The work is complete when:
 
 ---
 
-## Suggested Agent Prompt
 
-Use this prompt for the implementation agent:
-
-```text
-You are working in the WHDTLV project. Create a new host-side reporting subsystem that exports a prebuilt TLV file to CSV for inspection in Excel.
-
-Please read this implementation brief first, then inspect the existing TLV reader, field map, group map, archive_info, CSV loading, and filtering code before planning changes. Reuse existing parsing helpers where practical, but keep the reporting subsystem separate from filtering and do not add it to the default Amiga runtime build.
-
-Add reusable reporting code under src/whdtlv/reporting/ and a host command-line front end under tools_src/whdtlv_report/. The tool should support wide mode, with one row per variant, and long mode, with one row per stored field value. It must include group_id, group_name where available, display_name, archive_info where present, raw IDs, resolved CSV tokens, optional descriptions, and status values for unresolved or malformed data.
-
-The implementation must be multi-value aware. If the same field appears more than once on a variant, wide mode must preserve all values by joining them with semicolons, and long mode must emit one row per value using value_index. Do not drop duplicate values, because they may be diagnostically useful.
-
-The CSV export must be field-map driven rather than hard-coded to Games fields. It should tolerate missing CSV files and unknown numeric IDs by reporting statuses such as missing_csv or not_in_csv instead of failing by default. Fatal errors should be limited to missing required arguments, unreadable TLV, invalid TLV structure, output write failure, or allocation failure.
-
-Keep the API compact. Suggested functions are whdtlv_report_options_defaults() and whdtlv_report_csv_file(). Add host tests for wide export, long export, group_id/group_name output, multi-value handling, archive_info formatting, missing CSV behaviour, CSV escaping, and invalid input handling. Ensure existing filtering tests still pass.
-
-Before making large changes, produce a short implementation plan that identifies which existing modules will be reused and which files will be added. If the current code structure makes any part of this brief impractical, explain the issue and choose the smallest compatible design that preserves the reporting/filtering separation.
-```

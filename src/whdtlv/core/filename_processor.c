@@ -467,6 +467,68 @@ static ProcessingResult version_parser_extract(const char *version_token,
 /* Language Parsing */
 
 /**
+ * @brief Validate a compact language token and build its bitfield.
+ *
+ * A token is valid ONLY if it can be split into 2-character chunks that
+ * ALL resolve in Language.csv.  If any chunk is unknown the whole token is
+ * rejected: no bits are set and the function returns false.
+ *
+ * This rule prevents substring extraction from arbitrary words such as
+ * "EasyPlay" (which contains "Pl" = Polish) or "Infogrames" (which
+ * contains "Gr" = Greek and "Es" = Spanish).
+ *
+ * Single-language tokens (len == 2): one chunk must match exactly.
+ * Compact multilingual tokens (len >= 4, even): every chunk must match.
+ *
+ * C89-compatible: all locals declared at block top, no for-init syntax.
+ */
+static bool is_compact_language_token(const char *token,
+                                      CSVCache *language_cache,
+                                      GlobalCSVManager *csv_manager,
+                                      uint16_t *out_bitfield)
+{
+    size_t len;
+    size_t i;
+
+    *out_bitfield = 0;
+
+    len = strlen(token);
+    /* Odd length or empty: cannot be made of 2-character chunks */
+    if (len < 2 || (len % 2) != 0 || len > (size_t)MAX_LANGUAGE_CHARS) {
+        return false;
+    }
+
+    for (i = 0; i < len; i += 2) {
+        char c0 = token[i];
+        char c1 = token[i + 1];
+        char lang_code[3];
+        uint32_t lang_id;
+
+        if (c0 >= 'A' && c0 <= 'Z') { c0 = (char)(c0 + 32); }
+        if (c1 >= 'A' && c1 <= 'Z') { c1 = (char)(c1 + 32); }
+        lang_code[0] = c0;
+        lang_code[1] = c1;
+        lang_code[2] = '\0';
+
+        if (language_cache != NULL) {
+            lang_id = csv_cache_lookup_loaded(language_cache, lang_code);
+        } else {
+            lang_id = csv_cache_lookup(csv_manager, "Language", lang_code);
+        }
+
+        /* Unknown chunk: reject the entire token immediately */
+        if (lang_id == 0 || lang_id > 16) {
+            *out_bitfield = 0;
+            return false;
+        }
+
+        *out_bitfield |= (uint16_t)(1u << (lang_id - 1u));
+    }
+
+    return true;
+}
+
+/**
  * @brief Parse language token into bitfield using field registry
  */
 static ProcessingResult language_parser_parse_token(const char *language_token,
@@ -484,36 +546,18 @@ static ProcessingResult language_parser_parse_token(const char *language_token,
 
     *language_bitfield = 0;
 
-    /* Check if this looks like a language token (2-char combinations) */
-    size_t len = strlen(language_token);
-    if (len < 2 || len % 2 != 0 || len > MAX_LANGUAGE_CHARS) {
-        processing_error_set(error, PROCESSING_ERROR_INVALID_FORMAT, language_token, NULL,
-                             "Invalid language token format");
-        return PROCESSING_ERROR_INVALID_FORMAT;
-    }
-
     language_cache = NULL;
     if (csv_manager->cache_enabled) {
         language_cache = csv_cache_get_or_load(csv_manager, "Language");
     }
 
-    /* Parse each 2-character language code */
-    for (size_t i = 0; i < len; i += 2) {
-        char c0 = language_token[i]; char c1 = language_token[i+1];
-        if (c0 >= 'A' && c0 <= 'Z') c0 = (char)(c0 + 32);
-        if (c1 >= 'A' && c1 <= 'Z') c1 = (char)(c1 + 32);
-        char lang_code[3] = {c0, c1, '\0'};
-        uint32_t lang_id;
-
-        /* Look up language code in CSV */
-        if (language_cache != NULL) {
-            lang_id = csv_cache_lookup_loaded(language_cache, lang_code);
-        } else {
-            lang_id = csv_cache_lookup(csv_manager, "Language", lang_code);
-        }
-        if (lang_id > 0 && lang_id <= 16) {  /* Assuming max 16 languages for bitfield */
-            *language_bitfield |= (1 << (lang_id - 1));
-        }
+    /* Validate and decode the token. Every 2-character chunk must resolve
+     * in Language.csv; partial substring matches are not accepted. */
+    if (!is_compact_language_token(language_token, language_cache,
+                                   csv_manager, language_bitfield)) {
+        processing_error_set(error, PROCESSING_ERROR_TOKEN_NOT_FOUND, language_token, NULL,
+                             "Not a valid language token");
+        return PROCESSING_ERROR_TOKEN_NOT_FOUND;
     }
 
     return PROCESSING_SUCCESS;

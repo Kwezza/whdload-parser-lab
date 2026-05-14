@@ -84,6 +84,8 @@ ifeq ($(TARGET),amiga)
 else
 	BIN_TEST_FILTER := $(BUILD_DIR)/test_filter_facade.exe
 	TEST_FILTER_RUN := $(subst /,\,$(BIN_TEST_FILTER))
+	BIN_REPORT := $(BUILD_DIR)/whdtlv_report.exe
+	BIN_TEST_REPORT := $(BUILD_DIR)/test_report_csv.exe
 endif
 
 # Objects shared by all binaries (everything except the main entry points)
@@ -91,6 +93,37 @@ LIB_OBJ := $(filter-out $(BUILD_DIR)/tools_src/dat_to_tlv_main.o,$(OBJ))
 
 TEST_FILTER_OBJ := $(LIB_OBJ) \
                    $(BUILD_DIR)/tests/filtering/test_filter_facade.o
+
+# Reporting subsystem (host-only)
+REPORT_SRC := src/whdtlv/reporting/whdtlv_report_csv.c
+REPORT_OBJ := $(REPORT_SRC:%.c=$(BUILD_DIR)/%.o)
+
+REPORT_TOOL_OBJ := $(LIB_OBJ) \
+                   $(REPORT_OBJ) \
+                   $(BUILD_DIR)/tools_src/whdtlv_report/main.o
+
+TEST_REPORT_OBJ := $(LIB_OBJ) \
+                   $(REPORT_OBJ) \
+                   $(BUILD_DIR)/tests/reporting/test_report_csv.o
+
+ifeq ($(TARGET),amiga)
+	BIN_TEST_LANGUAGE :=
+else
+	BIN_TEST_LANGUAGE := $(BUILD_DIR)/test_language_tokens.exe
+endif
+
+TEST_LANGUAGE_OBJ := $(LIB_OBJ) \
+                     $(BUILD_DIR)/tests/reporting/test_language_tokens.o
+
+ifeq ($(TARGET),amiga)
+	BIN_TEST_EFFECTIVE :=
+else
+	BIN_TEST_EFFECTIVE := $(BUILD_DIR)/test_effective_columns.exe
+endif
+
+TEST_EFFECTIVE_OBJ := $(LIB_OBJ) \
+                      $(REPORT_OBJ) \
+                      $(BUILD_DIR)/tests/reporting/test_effective_columns.o
 
 
 help:
@@ -104,6 +137,10 @@ help:
 	@echo   make run             - Run host binary when TARGET=host
 	@echo   make demo            - Build the facade demo program -^> build\host\tlv_demo.exe
 	@echo   make test-filter     - Build and run the public filter facade tests
+	@echo   make report          - Build the host-side TLV CSV export tool ^(host only^)
+	@echo   make test-report     - Build and run the reporting subsystem tests ^(host only^)
+	@echo   make test-language   - Build and run the language token validation tests ^(host only^)
+	@echo   make test-effective  - Build and run the effective-columns tests ^(host only^)
 	@echo   make clean           - Remove build output for current TARGET and default TLV output
 	@echo.
 	@echo Variables:
@@ -138,3 +175,39 @@ test-filter: $(BIN_TEST_FILTER)
 $(BIN_TEST_FILTER): $(TEST_FILTER_OBJ)
 	@$(call MKDIR_CMD,$(BUILD_DIR))
 	$(CC) $(CFLAGS) -o $@ $(TEST_FILTER_OBJ) $(LDFLAGS)
+
+ifneq ($(TARGET),amiga)
+report: $(BIN_REPORT)
+
+$(BIN_REPORT): $(REPORT_TOOL_OBJ)
+	@$(call MKDIR_CMD,$(BUILD_DIR))
+	$(CC) $(CFLAGS) -o $@ $(REPORT_TOOL_OBJ) $(LDFLAGS)
+
+test-report: $(BIN_TEST_REPORT)
+	$(subst /,\,$(BIN_TEST_REPORT))
+
+$(BIN_TEST_REPORT): $(TEST_REPORT_OBJ)
+	@$(call MKDIR_CMD,$(BUILD_DIR))
+	$(CC) $(CFLAGS) -o $@ $(TEST_REPORT_OBJ) $(LDFLAGS)
+test-language: $(BIN_TEST_LANGUAGE)
+	$(subst /,\,$(BIN_TEST_LANGUAGE))
+
+$(BIN_TEST_LANGUAGE): $(TEST_LANGUAGE_OBJ)
+	@$(call MKDIR_CMD,$(BUILD_DIR))
+	$(CC) $(CFLAGS) -o $@ $(TEST_LANGUAGE_OBJ) $(LDFLAGS)
+test-effective: $(BIN_TEST_EFFECTIVE)
+	$(subst /,\,$(BIN_TEST_EFFECTIVE))
+
+$(BIN_TEST_EFFECTIVE): $(TEST_EFFECTIVE_OBJ)
+	@$(call MKDIR_CMD,$(BUILD_DIR))
+	$(CC) $(CFLAGS) -o $@ $(TEST_EFFECTIVE_OBJ) $(LDFLAGS)
+else
+report:
+	@echo report target is host-only. Use TARGET=host.
+test-report:
+	@echo test-report target is host-only. Use TARGET=host.
+test-language:
+	@echo test-language target is host-only. Use TARGET=host.
+test-effective:
+	@echo test-effective target is host-only. Use TARGET=host.
+endif
