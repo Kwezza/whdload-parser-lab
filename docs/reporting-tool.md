@@ -38,7 +38,9 @@ whdtlv_report.exe --tlv <file.tlv> [options]
 |----------|-------------|---------|
 | `--defs <dir>` | Asset CSV definitions directory | `assets_raw/defs` |
 | `--out <path>` | Output CSV file path | `<tlv-basename>.csv` |
-| `--mode wide\|long` | Export layout (see below) | `wide` |
+| `--mode wide\|long\|profile` | Export layout (see below) | `wide` |
+| `--profile <path>` | Profile file for `--mode profile` (required in that mode) | — |
+| `--search <pattern>` | Narrow profile report to groups whose name matches the pattern | — |
 | `--include-ids` | Add `_ids` columns with raw numeric token IDs | off |
 | `--include-desc` | Add `_descriptions` columns with long CSV descriptions | off |
 | `--include-status` | Add `_status` columns with resolution status codes | off |
@@ -57,6 +59,7 @@ whdtlv_report.exe --tlv <file.tlv> [options]
 | 3 | TLV structure is invalid |
 | 4 | Output CSV could not be created |
 | 5 | Out of memory |
+| 6 | Profile could not be loaded or bound (profile mode only) |
 | 9 | Unknown error |
 
 ---
@@ -221,6 +224,157 @@ Skip rows where every field resolved cleanly.  Use this to surface entries that
 have unrecognised IDs or malformed payloads.
 
 The two flags can be combined.
+
+---
+
+## Profile-Aware Report (`--mode profile`)
+
+### What it does
+
+`--mode profile` runs the real selection filter against an existing `.tlv` file
+and a `.profile` file, then writes a CSV that records every selection decision
+for every variant:
+
+- Which variant was selected by the profile (winner).
+- Which variant lost on score.
+- Which variant was rejected by an exclude rule.
+- Which variant was ineligible for a lane.
+- Which variant was duplicate-suppressed in multi-lane output.
+
+The report uses the actual filtering engine — no second copy of the selection
+logic is maintained inside the reporting code.  If the profile is changed and
+the report rerun, the results will reflect the real filter behaviour exactly.
+
+### Required arguments
+
+| Argument | Description |
+|----------|-------------|
+| `--profile <path>` | Path to the `.profile` file to evaluate |
+| `--tlv <path>` | Input `.tlv` file (as for other modes) |
+
+`--mode profile` fails with exit code 6 if `--profile` is not supplied.
+
+### Optional arguments
+
+| Argument | Description |
+|----------|-------------|
+| `--search <pattern>` | Narrow output to groups whose name matches the pattern. Wildcards `*` and `?` are supported. Groups that do not match are omitted from the CSV entirely. |
+
+### Example command lines
+
+Basic profile report:
+
+```bat
+whdtlv_report.exe ^
+  --tlv output\Games.tlv ^
+  --defs assets_raw\defs ^
+  --profile assets_raw\profiles\pal_aga_4mb.profile ^
+  --out output\Games_profile_report.csv ^
+  --mode profile
+```
+
+Narrowed to a single game family:
+
+```bat
+whdtlv_report.exe ^
+  --tlv output\Games.tlv ^
+  --defs assets_raw\defs ^
+  --profile assets_raw\profiles\pal_aga_4mb.profile ^
+  --search lotus* ^
+  --out output\Games_lotus_report.csv ^
+  --mode profile
+```
+
+### Output columns
+
+**Selection metadata (fixed columns, always present):**
+
+| Column | Description |
+|--------|-------------|
+| `selected_marker` | Single-character decision marker (see table below) |
+| `selected_rank` | `1` for winners, `0` for all others. Sort ascending to put winners first. |
+| `reason_code` | Short string explaining the decision (see table below) |
+| `selection_lane` | Zero-based lane index. Empty for rejected variants. |
+| `lane_requirements` | Human-readable lane constraint string, e.g. `chipset=AGA; language=En`. `single-lane` for comma-only profiles. |
+| `group_id` | Numeric group ID shared by all variants of the same title |
+| `group_name` | Canonical title name |
+| `display_name` | Full variant filename from the TLV |
+| `score_total` | Total score assigned by the profile scorer. Empty for rejected or lane-ineligible rows. |
+| `reject_field` | Profile field that triggered exclusion. Empty unless `reason_code=rejected_exclude`. |
+| `lost_to_display_name` | Filename of the winner that beat this variant. Populated for `lost_score` rows. |
+| `lost_to_score` | Score of the winner. Populated for `lost_score` rows. |
+
+**Per-field effective columns (one set per profile-bound field):**
+
+| Column | Description |
+|--------|-------------|
+| `<field>` | Raw explicit value(s) stored in the TLV, semicolon-joined for multi-value fields. Empty if no explicit value. |
+| `<field>_effective` | The value the filter actually used: explicit value if present, or the CSV default. |
+| `<field>_effective_source` | How the effective value was obtained (see table below). |
+
+Profile mode always emits effective columns for every field bound in the
+profile, regardless of whether `--include-effective` is also active.
+
+### Marker values
+
+| Marker | Meaning |
+|--------|---------|
+| `X` | Selected winner for this lane |
+| `-` | Considered and scored but did not win |
+| `R` | Rejected by an exclude rule before lane selection |
+| `N` | Not eligible for this lane (lane requirements not met) |
+| `D` | Duplicate-suppressed: variant was already selected by an earlier lane |
+| `S` | Group skipped by search (reserved; currently such groups are omitted entirely) |
+| `?` | Unknown reason (should not appear in practice) |
+
+### Reason codes
+
+| Reason code | Meaning |
+|-------------|---------|
+| `winner` | This variant was selected for its lane |
+| `lost_score` | Scored, but another variant scored higher |
+| `no_score` | Eligible but received a zero score (no matching include token) |
+| `rejected_exclude` | An exclude rule matched a field value before lane evaluation |
+| `not_lane_eligible` | The variant's field values did not satisfy this lane's bucket requirements |
+| `duplicate_suppressed` | Already selected by an earlier lane; skipped in this lane |
+
+### Effective source values
+
+| Source | Meaning |
+|--------|---------|
+| `explicit` | The TLV contains an explicit value; the effective column mirrors it |
+| `default` | No explicit value stored; the effective column carries the CSV default |
+| `missing` | No explicit value and no CSV default defined; the effective column is blank |
+
+### Example CSV snippet
+
+```csv
+selected_marker,selected_rank,reason_code,selection_lane,lane_requirements,group_id,group_name,display_name,score_total,reject_field,lost_to_display_name,lost_to_score,chipset,chipset_effective,chipset_effective_source,language,language_effective,language_effective_source,memory,memory_effective,memory_effective_source
+"X",1,"winner",0,"single-lane",145,"AlienBreed2","AlienBreed2_v1.0_AGA_En",572,"","",,"aga","aga","explicit","en","en","explicit","fast2m","fast2m","explicit"
+"-",0,"lost_score",0,"single-lane",145,"AlienBreed2","AlienBreed2_v1.0_OCS_En",422,"","AlienBreed2_v1.0_AGA_En",572,"ocs","ocs","explicit","en","en","explicit","fast1m","fast1m","explicit"
+"R",0,"rejected_exclude",,,145,"AlienBreed2","AlienBreed2_v1.0_CD32_En",,"chipset","","",,"cd32","explicit","en","en","explicit",,,"missing"
+```
+
+### Multi-lane profiles
+
+When a profile uses slash (`/`) bucket separators, the selector generates
+multiple selection lanes and can output more than one winner per group.  The
+`selection_lane` column identifies which lane evaluated each variant row, and
+`lane_requirements` shows what that lane required.
+
+For a profile with `include=AGA/ECS,OCS` on chipset and `include=En/De` on
+language, four lanes are generated and up to four variants per group may be
+selected.
+
+### Performance and build footprint
+
+The selection trace code is compiled only when
+`-DWHDTLV_ENABLE_SELECTION_TRACE=1` is set.  The `Makefile` adds this flag
+when building `whdtlv_report` and the `test-profile` test binary.
+
+Normal builds — including all Amiga builds and the main `dat_to_tlv` binary —
+do not define this flag and therefore contain no trace structures, no trace
+hooks, and no extra public API surface.
 
 ---
 

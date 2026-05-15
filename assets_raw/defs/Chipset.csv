@@ -1,3 +1,9 @@
+# Alias rows:
+# Multiple rows may share the same numeric ID.  The first row for an ID is the
+# canonical token and description.  Later rows with the same ID are filename
+# aliases that resolve to the same stored value.  Profiles should normally use
+# the canonical token, while DAT filenames may contain any listed alias.
+#
 1,OCS,Original Chip Set,default
 2,ECS,Enhanced Chip Set
 3,AGA,Advanced Graphics Architecture

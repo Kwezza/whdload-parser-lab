@@ -1,0 +1,6 @@
+selected_marker,selected_rank,reason_code,selection_lane,lane_requirements,group_id,group_name,display_name,score_total,reject_field,lost_to_display_name,lost_to_score,chipset,chipset_effective,chipset_effective_source,language,language_effective,language_effective_source,memory,memory_effective,memory_effective_source
+"X",1,"winner",0,"single-lane",1521,"Lotus2","Lotus2_v1.13_0497",393,,,,,"ocs","default",,"en","default",,,"missing"
+"-",0,"lost_score",0,"single-lane",1521,"Lotus2","Lotus2_v1.13_CD32",243,,"Lotus2_v1.13_0497",393,"cd32","cd32","explicit",,"en","default",,,"missing"
+"X",1,"winner",0,"single-lane",1522,"Lotus3","Lotus3_v1.6_0217",393,,,,,"ocs","default",,"en","default",,,"missing"
+"X",1,"winner",0,"single-lane",1523,"Lotus","Lotus_v1.1_0774",393,,,,,"ocs","default",,"en","default",,,"missing"
+"-",0,"lost_score",0,"single-lane",1523,"Lotus","Lotus_v1.1_CD32",243,,"Lotus_v1.1_0774",393,"cd32","cd32","explicit",,"en","default",,,"missing"

@@ -128,8 +128,10 @@ TEST_REPORT_OBJ := $(LIB_OBJ) \
 
 ifeq ($(TARGET),amiga)
 	BIN_TEST_LANGUAGE :=
+	BIN_TEST_PROFILE  :=
 else
 	BIN_TEST_LANGUAGE := $(BUILD_DIR)/test_language_tokens.exe
+	BIN_TEST_PROFILE  := $(BUILD_DIR)/test_profile_report.exe
 endif
 
 TEST_LANGUAGE_OBJ := $(LIB_OBJ) \
@@ -144,6 +146,13 @@ endif
 TEST_EFFECTIVE_OBJ := $(LIB_OBJ) \
                       $(REPORT_OBJ) \
                       $(BUILD_DIR)/tests/reporting/test_effective_columns.o
+
+TEST_PROFILE_OBJ := $(REPORT_LIB_OBJ) \
+                    $(TRACE_SELECT_OBJ) \
+                    $(TRACE_COLLECT_OBJ) \
+                    $(REPORT_OBJ) \
+                    $(PROF_REPORT_OBJ) \
+                    $(BUILD_DIR)/tests/reporting/test_profile_report.o
 
 
 help:
@@ -161,6 +170,7 @@ help:
 	@echo   make test-report     - Build and run the reporting subsystem tests ^(host only^)
 	@echo   make test-language   - Build and run the language token validation tests ^(host only^)
 	@echo   make test-effective  - Build and run the effective-columns tests ^(host only^)
+	@echo   make test-profile   - Build and run the profile-aware report tests ^(host only^)
 	@echo   make clean           - Remove build output for current TARGET and default TLV output
 	@echo.
 	@echo Variables:
@@ -236,6 +246,16 @@ test-effective: $(BIN_TEST_EFFECTIVE)
 $(BIN_TEST_EFFECTIVE): $(TEST_EFFECTIVE_OBJ)
 	@$(call MKDIR_CMD,$(BUILD_DIR))
 	$(CC) $(CFLAGS) -o $@ $(TEST_EFFECTIVE_OBJ) $(LDFLAGS)
+test-profile: $(BIN_TEST_PROFILE)
+	$(subst /,\,$(BIN_TEST_PROFILE))
+
+$(BIN_TEST_PROFILE): $(TEST_PROFILE_OBJ)
+	@$(call MKDIR_CMD,$(BUILD_DIR))
+	$(CC) $(TRACE_CFLAGS) -o $@ $(TEST_PROFILE_OBJ) $(LDFLAGS)
+
+$(BUILD_DIR)/tests/reporting/test_profile_report.o: tests/reporting/test_profile_report.c
+	@$(call MKDIR_CMD,$(dir $@))
+	$(CC) $(TRACE_CFLAGS) -c $< -o $@
 else
 report:
 	@echo report target is host-only. Use TARGET=host.
@@ -245,4 +265,6 @@ test-language:
 	@echo test-language target is host-only. Use TARGET=host.
 test-effective:
 	@echo test-effective target is host-only. Use TARGET=host.
+test-profile:
+	@echo test-profile target is host-only. Use TARGET=host.
 endif

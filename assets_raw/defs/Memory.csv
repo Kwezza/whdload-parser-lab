@@ -11,6 +11,5 @@
 11,8MB,8MB RAM required
 12,12MB,12MB RAM required
 13,15MB,15MB RAM required
-14,LowMem,Designed for low memory systems
-15,SlowMem,May require slow RAM (A500 trapdoor)
+14,SlowMem,May require slow RAM (A500 trapdoor)
 15,Slow,May require slow RAM (A500 trapdoor)

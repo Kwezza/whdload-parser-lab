@@ -26,3 +26,4 @@ ID,Name,Pretty
 25,NoSpeech,No Speech
 26,AVI,AVI
 27,Kernal_Version,Kernal Version
+28,LowMem,Designed for low memory systems
