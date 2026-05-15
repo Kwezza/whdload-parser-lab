@@ -1,0 +1,10 @@
+#ID, Filename tag, description, is default?
+1,Standard,Standard edition,default
+2,AltVersion,Alternative version
+3,AltLevels,Alternative levels
+4,EarlyBuild,Early build
+5,A1200Version,A1200-specific version
+6,NonAGA,Non-AGA version
+7,A1000,A1000-specific version
+8,DOS,DOS-related version
+9,KernalVersion,Kernel/Kernal-specific version

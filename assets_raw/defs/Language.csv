@@ -1,3 +1,4 @@
+#ID, Filename tag, description, is default?
 1,Cz,Czech
 2,Dk,Danish
 3,NL,Dutch
@@ -10,3 +11,4 @@
 10,Es,Spanish
 11,Pl,Polish
 12,Se,Swedish
+13,Hr,Croatian

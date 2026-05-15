@@ -1,4 +1,5 @@
-﻿1,AmigaAction,Amiga Action
+﻿#ID, Filename tag, description, is default?
+1,AmigaAction,Amiga Action
 2,AmigaFormat,Amiga Format
 3,AmigaPower,Amiga Power
 4,AmigaStar,Amiga Star

@@ -39,6 +39,7 @@ typedef struct {
     char *long_name;    /* Optional: full/wordy display name (e.g., "French") */
     uint16_t len;       /* strlen(token) cached to reject mismatched-length candidates cheaply */
     uint16_t fingerprint; /* Low 16 bits of djb2 hash, used as a fast pre-filter before strcmp() */
+    uint8_t is_canonical; /* 1 = first row seen for this numeric ID (wins all reverse lookups) */
 } CSVEntry;
 
 /**

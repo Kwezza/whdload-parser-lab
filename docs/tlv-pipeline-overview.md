@@ -54,6 +54,40 @@ are derived directly from the filename without a lookup step.
 
 ---
 
+### CSV Alias Rows
+
+A CSV file may contain more than one row for the same numeric ID. The **first** row encountered
+for a given ID is the **canonical** row: its token and description are used whenever the pipeline
+maps that ID back to a human-readable label (for example, in CSV export reports or the
+effective-column output). Every subsequent row with the same ID is an **alias** row.
+
+Alias rows extend the set of filename tokens that resolve to a single ID — useful when a field
+value appears under several spellings in real-world filenames. For example:
+
+```
+7,UNKNOWN512K,512 KB memory (type unknown),default
+7,512k,Alias for UNKNOWN512K
+7,512kb,Alias for UNKNOWN512K
+```
+
+All three tokens forward-resolve to ID 7. Reverse-resolution (ID → label) always returns
+`UNKNOWN512K` and its description because that is the first row seen for ID 7.
+
+**Rules that apply to alias rows:**
+
+- Alias rows participate fully in forward (token → ID) lookup. All spellings match equally.
+- Alias rows are invisible to reverse (ID → token/description) lookup. Only the canonical row
+  is returned.
+- The `default` marker in the optional fourth column is only meaningful on the canonical row.
+  An alias row carrying `default` is treated as an extra default declaration, which the report
+  tool flags as ambiguous (more than one default row).
+- Duplicate token strings within the same CSV file are still rejected regardless of the ID.
+  The second occurrence of the same token (case-insensitive) is silently dropped.
+- CRC-32 fingerprinting is not affected. The checksum is computed over the raw file bytes,
+  so any change to the file content changes the fingerprint as normal.
+
+---
+
 ## Stage 3 — Parse the DAT File
 
 The tool reads the DAT file and extracts every `<rom ... />` entry it contains. For each entry
@@ -209,7 +243,9 @@ without modifying the Amiga binary.
 
 **Tokens, not strings.** Wherever a field has a finite set of known values (chipset, language,
 media type, etc.), the TLV stores a numeric token ID rather than the string. This reduces file
-size and makes lookups on the Amiga trivially fast.
+size and makes lookups on the Amiga trivially fast. A single numeric ID can be reached by
+multiple alias tokens (see *CSV Alias Rows* in Stage 2); only the canonical first row for that
+ID is used when converting the ID back to a display label.
 
 **All heavy work is on the host.** CSV loading, token resolution, and filename decoding all
 happen on the host PC. The Amiga receives a pre-processed binary and does no parsing at runtime.

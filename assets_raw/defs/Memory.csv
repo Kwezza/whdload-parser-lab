@@ -1,15 +1,59 @@
-1,Chip,Requires chip RAM
-2,Fast,Requires fast RAM
-3,512k,512KB RAM required
-4,512KB,512KB RAM required
-5,1MB,1MB RAM required
-6,1MBChip,1MB chip RAM required
-7,1Mb,1MB RAM required
-8,1MbChip,1MB chip RAM required
-9,1.5MB,1.5MB RAM required
-10,2MB,2MB RAM required
-11,8MB,8MB RAM required
-12,12MB,12MB RAM required
-13,15MB,15MB RAM required
-14,SlowMem,May require slow RAM (A500 trapdoor)
-15,Slow,May require slow RAM (A500 trapdoor)
+# Memory.csv
+#
+# Memory tokens describe the RAM requirement or RAM target found in a WHDLoad
+# filename. Amiga memory is not a single pool, so canonical tokens separate
+# Chip RAM, Fast/Other RAM, Slow/trapdoor RAM, and ambiguous size-only tags.
+#
+# Alias rows:
+# Multiple rows may share the same numeric ID. The first row for an ID is the
+# canonical token and description. Later rows with the same ID are aliases used
+# to recognise alternative filename spellings from DAT/WHDLoad names.
+# Profiles should normally use the canonical token, not the alias token.
+#
+# Example:
+#   3,UNKNOWN512K,512 KB memory required - type unknown
+#   3,512k,Alias for UNKNOWN512K
+#   3,512KB,Alias for UNKNOWN512K
+#
+# Token matching is case-insensitive, so do not add separate aliases that differ
+# only by case, such as 1MB and 1Mb. One spelling covers both.
+# The optional fourth column is reserved for the word default only.
+# LOWMEM is intentionally not listed here. It should be represented as a
+# variant tag because it is a reduced-memory slave/build hint, not an exact RAM
+# requirement.
+#
+# Example expanded-machine profile order:
+#   [Filter.memory]
+#   include=FAST64M,FAST32M,FAST16M,FAST15M,FAST12M,FAST8M,FAST4M,FAST2M,FAST1M,FAST512K,CHIP2M,CHIP1M,CHIP512K,UNKNOWN2M,UNKNOWN1M,UNKNOWN512K
+#   exclude=
+#
+# Example stock A1200 profile order:
+#   [Filter.memory]
+#   include=CHIP2M,CHIP1M,CHIP512K,UNKNOWN2M,UNKNOWN1M,UNKNOWN512K
+#   exclude=FAST512K,FAST1M,FAST2M,FAST4M,FAST8M,FAST12M,FAST15M,FAST16M,FAST32M,FAST64M,SLOW512K,SLOW1M,SLOW_UNKNOWN,FAST_UNKNOWN
+#
+#ID, Filename tag, description, is default?
+1,CHIP_UNKNOWN,Chip RAM required - amount unknown
+1,Chip,Alias for CHIP_UNKNOWN
+2,FAST_UNKNOWN,Fast RAM required - amount unknown
+2,Fast,Alias for FAST_UNKNOWN
+3,UNKNOWN512K,512 KB memory required - type unknown
+3,512k,Alias for UNKNOWN512K
+3,512KB,Alias for UNKNOWN512K
+5,UNKNOWN1M,1 MB memory required - type unknown
+5,1MB,Alias for UNKNOWN1M
+6,CHIP1M,1 MB Chip RAM required
+6,1MBChip,Alias for CHIP1M
+9,UNKNOWN1_5M,1.5 MB memory required - type unknown
+9,1.5MB,Alias for UNKNOWN1_5M
+10,UNKNOWN2M,2 MB memory required - type unknown
+10,2MB,Alias for UNKNOWN2M
+11,FAST8M,8 MB Fast RAM required
+11,8MB,Alias for FAST8M
+12,FAST12M,12 MB Fast RAM required
+12,12MB,Alias for FAST12M
+13,FAST15M,15 MB Fast RAM required
+13,15MB,Alias for FAST15M
+14,SLOW_UNKNOWN,Slow/trapdoor RAM required - amount unknown
+14,SlowMem,Alias for SLOW_UNKNOWN
+14,Slow,Alias for SLOW_UNKNOWN

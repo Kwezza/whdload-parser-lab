@@ -4,6 +4,7 @@
 # aliases that resolve to the same stored value.  Profiles should normally use
 # the canonical token, while DAT filenames may contain any listed alias.
 #
+#ID, Filename tag, description, is default?
 1,OCS,Original Chip Set,default
 2,ECS,Enhanced Chip Set
 3,AGA,Advanced Graphics Architecture

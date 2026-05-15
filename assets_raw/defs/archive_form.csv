@@ -1,0 +1,5 @@
+#ID, Filename tag, description, is default?
+1,Standard,Standard packaging,default
+2,Crunched,Crunched/compressed data
+3,Repacked,Repacked archive
+4,HighDensity,High-density disk/archive source

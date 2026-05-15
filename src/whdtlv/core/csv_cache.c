@@ -178,6 +178,8 @@ static bool csv_cache_insert(CSVCache *cache, const char *token, const char *lon
     char *q;
     uint32_t index;
     uint32_t original_index;
+    uint8_t  set_canonical;
+    uint32_t scan_k;
 
     if (!cache || !token || cache->entry_count >= cache->capacity) {
         return false;
@@ -248,7 +250,21 @@ static bool csv_cache_insert(CSVCache *cache, const char *token, const char *lon
     } else {
         cache->entries[index].long_name = NULL;
     }
-    cache->entries[index].id = id;
+    /* First row in the CSV file for a given numeric ID is canonical.
+     * Scan for an already-inserted entry with the same id that was
+     * already marked canonical; if found this row is an alias only. */
+    set_canonical = 1;
+    for (scan_k = 0; scan_k < cache->capacity; scan_k++) {
+        if (cache->entries[scan_k].token != NULL &&
+            cache->entries[scan_k].id == id &&
+            cache->entries[scan_k].is_canonical) {
+            set_canonical = 0;
+            break;
+        }
+    }
+
+    cache->entries[index].id           = id;
+    cache->entries[index].is_canonical = set_canonical;
     cache->entry_count++;
 
     return true;
@@ -1146,7 +1162,8 @@ const char *csv_cache_reverse_lookup(GlobalCSVManager *manager, const char *csv_
         CSVCache *cache = &manager->caches[i];
         if (cache->csv_name && strcmp(cache->csv_name, csv_name) == 0) {
             for (uint32_t j = 0; j < cache->capacity; j++) {
-                if (cache->entries[j].token && cache->entries[j].id == id) {
+                if (cache->entries[j].token && cache->entries[j].id == id &&
+                    cache->entries[j].is_canonical) {
                     if (want_long && cache->entries[j].long_name && cache->entries[j].long_name[0]) {
                         return cache->entries[j].long_name;
                     }

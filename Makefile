@@ -127,15 +127,20 @@ TEST_REPORT_OBJ := $(LIB_OBJ) \
                    $(BUILD_DIR)/tests/reporting/test_report_csv.o
 
 ifeq ($(TARGET),amiga)
-	BIN_TEST_LANGUAGE :=
-	BIN_TEST_PROFILE  :=
+	BIN_TEST_LANGUAGE  :=
+	BIN_TEST_PROFILE   :=
+	BIN_TEST_CSV_ALIAS :=
 else
-	BIN_TEST_LANGUAGE := $(BUILD_DIR)/test_language_tokens.exe
-	BIN_TEST_PROFILE  := $(BUILD_DIR)/test_profile_report.exe
+	BIN_TEST_LANGUAGE  := $(BUILD_DIR)/test_language_tokens.exe
+	BIN_TEST_PROFILE   := $(BUILD_DIR)/test_profile_report.exe
+	BIN_TEST_CSV_ALIAS := $(BUILD_DIR)/test_csv_alias.exe
 endif
 
 TEST_LANGUAGE_OBJ := $(LIB_OBJ) \
                      $(BUILD_DIR)/tests/reporting/test_language_tokens.o
+
+TEST_CSV_ALIAS_OBJ := $(LIB_OBJ) \
+                      $(BUILD_DIR)/tests/reporting/test_csv_alias.o
 
 ifeq ($(TARGET),amiga)
 	BIN_TEST_EFFECTIVE :=
@@ -169,6 +174,7 @@ help:
 	@echo   make report          - Build the host-side TLV CSV export tool ^(host only^)
 	@echo   make test-report     - Build and run the reporting subsystem tests ^(host only^)
 	@echo   make test-language   - Build and run the language token validation tests ^(host only^)
+	@echo   make test-csv-alias  - Build and run the CSV duplicate-ID alias tests ^(host only^)
 	@echo   make test-effective  - Build and run the effective-columns tests ^(host only^)
 	@echo   make test-profile   - Build and run the profile-aware report tests ^(host only^)
 	@echo   make clean           - Remove build output for current TARGET and default TLV output
@@ -234,6 +240,13 @@ test-report: $(BIN_TEST_REPORT)
 $(BIN_TEST_REPORT): $(TEST_REPORT_OBJ)
 	@$(call MKDIR_CMD,$(BUILD_DIR))
 	$(CC) $(CFLAGS) -o $@ $(TEST_REPORT_OBJ) $(LDFLAGS)
+test-csv-alias: $(BIN_TEST_CSV_ALIAS)
+	$(subst /,\,$(BIN_TEST_CSV_ALIAS))
+
+$(BIN_TEST_CSV_ALIAS): $(TEST_CSV_ALIAS_OBJ)
+	@$(call MKDIR_CMD,$(BUILD_DIR))
+	$(CC) $(CFLAGS) -o $@ $(TEST_CSV_ALIAS_OBJ) $(LDFLAGS)
+
 test-language: $(BIN_TEST_LANGUAGE)
 	$(subst /,\,$(BIN_TEST_LANGUAGE))
 
@@ -261,6 +274,8 @@ report:
 	@echo report target is host-only. Use TARGET=host.
 test-report:
 	@echo test-report target is host-only. Use TARGET=host.
+test-csv-alias:
+	@echo test-csv-alias target is host-only. Use TARGET=host.
 test-language:
 	@echo test-language target is host-only. Use TARGET=host.
 test-effective:

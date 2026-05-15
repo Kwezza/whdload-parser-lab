@@ -1,0 +1,9 @@
+# gameplay_modifier.csv
+# Gameplay-affecting variant tags.
+# These identify versions that deliberately change the normal play experience,
+# such as trainers, cheat modes, or altered difficulty. They are kept separate
+# from content, audio, chipset, language, and install layout because they affect
+# how the game plays rather than what machine it targets.
+#ID, Filename tag, description, is default?
+1,Standard,Standard gameplay,default
+2,Trainer,Trainer / cheat mode available
