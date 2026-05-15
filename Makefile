@@ -33,6 +33,12 @@ ifeq ($(PROFILE),1)
 	CFLAGS += -DTLV_PROFILE_ENABLE=1
 endif
 
+# Extra flags used only when compiling the trace-enabled report binary.
+# tlv_select_trace.c and whdtlv_report_profile.c require this flag.
+# tlv_select.c is compiled a second time with this flag (as tlv_select_tr.o)
+# so the report binary gets tlv_select_run_traced() linked in.
+TRACE_CFLAGS := $(CFLAGS) -DWHDTLV_ENABLE_SELECTION_TRACE=1
+
 MKDIR_CMD = if not exist "$(subst /,\,$(1))" mkdir "$(subst /,\,$(1))"
 RMDIR_CMD = if exist "$(subst /,\,$(1))" rmdir /s /q "$(subst /,\,$(1))"
 DEL_CMD = if exist "$(subst /,\,$(1))" del /q "$(subst /,\,$(1))"
@@ -98,8 +104,22 @@ TEST_FILTER_OBJ := $(LIB_OBJ) \
 REPORT_SRC := src/whdtlv/reporting/whdtlv_report_csv.c
 REPORT_OBJ := $(REPORT_SRC:%.c=$(BUILD_DIR)/%.o)
 
-REPORT_TOOL_OBJ := $(LIB_OBJ) \
+# Trace-enabled objects compiled with WHDTLV_ENABLE_SELECTION_TRACE=1.
+# These are built under separate names so they never pollute the main or
+# Amiga binaries.  The report binary links these instead of the normal
+# tlv_select.o.
+TRACE_SELECT_OBJ  := $(BUILD_DIR)/src/whdtlv/filtering/tlv_select_tr.o
+TRACE_COLLECT_OBJ := $(BUILD_DIR)/src/whdtlv/filtering/tlv_select_trace.o
+PROF_REPORT_OBJ   := $(BUILD_DIR)/src/whdtlv/reporting/whdtlv_report_profile.o
+
+# LIB_OBJ minus the non-trace tlv_select.o, replaced by the trace-enabled variant.
+REPORT_LIB_OBJ := $(filter-out $(BUILD_DIR)/src/whdtlv/filtering/tlv_select.o,$(LIB_OBJ))
+
+REPORT_TOOL_OBJ := $(REPORT_LIB_OBJ) \
+                   $(TRACE_SELECT_OBJ) \
+                   $(TRACE_COLLECT_OBJ) \
                    $(REPORT_OBJ) \
+                   $(PROF_REPORT_OBJ) \
                    $(BUILD_DIR)/tools_src/whdtlv_report/main.o
 
 TEST_REPORT_OBJ := $(LIB_OBJ) \
@@ -181,7 +201,22 @@ report: $(BIN_REPORT)
 
 $(BIN_REPORT): $(REPORT_TOOL_OBJ)
 	@$(call MKDIR_CMD,$(BUILD_DIR))
-	$(CC) $(CFLAGS) -o $@ $(REPORT_TOOL_OBJ) $(LDFLAGS)
+	$(CC) $(TRACE_CFLAGS) -o $@ $(REPORT_TOOL_OBJ) $(LDFLAGS)
+
+# Trace-enabled copy of tlv_select.c (needed by tlv_select_run_traced)
+$(TRACE_SELECT_OBJ): src/whdtlv/filtering/tlv_select.c
+	@$(call MKDIR_CMD,$(dir $@))
+	$(CC) $(TRACE_CFLAGS) -c $< -o $@
+
+# Trace row collector module
+$(TRACE_COLLECT_OBJ): src/whdtlv/filtering/tlv_select_trace.c
+	@$(call MKDIR_CMD,$(dir $@))
+	$(CC) $(TRACE_CFLAGS) -c $< -o $@
+
+# Profile report writer (requires trace infrastructure)
+$(PROF_REPORT_OBJ): src/whdtlv/reporting/whdtlv_report_profile.c
+	@$(call MKDIR_CMD,$(dir $@))
+	$(CC) $(TRACE_CFLAGS) -c $< -o $@
 
 test-report: $(BIN_TEST_REPORT)
 	$(subst /,\,$(BIN_TEST_REPORT))

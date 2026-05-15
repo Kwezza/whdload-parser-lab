@@ -33,6 +33,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if WHDTLV_ENABLE_SELECTION_TRACE
+#include "whdtlv/filtering/tlv_select_trace.h"
+/* Maximum eligible variants tracked per lane for winner/loser trace rows.
+ * Variants beyond this cap are still selected correctly; they simply do
+ * not receive a LOST_SCORE row.                                          */
+#define TRACE_ELIG_MAX 128
+#endif /* WHDTLV_ENABLE_SELECTION_TRACE */
+
 /*========================================================================*/
 /* Internal helpers                                                       */
 /*========================================================================*/
@@ -382,6 +390,25 @@ static int is_already_selected(const unsigned long *sel,
 }
 
 /*========================================================================*/
+/* Internal impl forward declaration                                      */
+/*========================================================================*/
+
+#if WHDTLV_ENABLE_SELECTION_TRACE
+static int tlv_select_run_impl(WhdSelectResult             *out,
+                               const WhdGroupSet           *gs,
+                               const WhdVariantArray       *arr,
+                               const WhdBoundProfile       *profile,
+                               const WhdGroupAllowList     *allow,
+                               WhdTlvSelectionTrace        *trace);
+#else
+static int tlv_select_run_impl(WhdSelectResult             *out,
+                               const WhdGroupSet           *gs,
+                               const WhdVariantArray       *arr,
+                               const WhdBoundProfile       *profile,
+                               const WhdGroupAllowList     *allow);
+#endif
+
+/*========================================================================*/
 /* Public: score a single variant                                         */
 /*========================================================================*/
 
@@ -472,11 +499,20 @@ void tlv_select_score_variant(WhdVariantScore       *out,
  */
 #define SEL_REJECT_CACHE 128
 
-int tlv_select_run(WhdSelectResult             *out,
-                   const WhdGroupSet           *gs,
-                   const WhdVariantArray       *arr,
-                   const WhdBoundProfile       *profile,
-                   const WhdGroupAllowList     *allow)
+#if WHDTLV_ENABLE_SELECTION_TRACE
+static int tlv_select_run_impl(WhdSelectResult             *out,
+                               const WhdGroupSet           *gs,
+                               const WhdVariantArray       *arr,
+                               const WhdBoundProfile       *profile,
+                               const WhdGroupAllowList     *allow,
+                               WhdTlvSelectionTrace        *trace)
+#else
+static int tlv_select_run_impl(WhdSelectResult             *out,
+                               const WhdGroupSet           *gs,
+                               const WhdVariantArray       *arr,
+                               const WhdBoundProfile       *profile,
+                               const WhdGroupAllowList     *allow)
+#endif
 {
     WhdSelectEntry   *entries;
     WhdSelectionPlan  plan;
@@ -566,6 +602,21 @@ int tlv_select_run(WhdSelectResult             *out,
                 if (vi < (unsigned long)SEL_REJECT_CACHE) {
                     reject_cache[vi] = 1u;
                 }
+#if WHDTLV_ENABLE_SELECTION_TRACE
+                if (trace) {
+                    WhdTlvSelectionTraceRow tr_row;
+                    memset(&tr_row, 0, sizeof(tr_row));
+                    tr_row.group_index           = g;
+                    tr_row.variant_index         = arr_idx;
+                    tr_row.lane_index            = 0xFFFFFFFFul;
+                    tr_row.group_id              = (unsigned short)grp->group_id;
+                    tr_row.rejected              = 1;
+                    tr_row.lost_to_variant_index = 0xFFFFFFFFul;
+                    tr_row.reject_field_index    = vs.reject_field;
+                    tr_row.reason                = WHDTLV_TRACE_REASON_REJECTED_EXCLUDE;
+                    whdtlv_trace_add_row(trace, &tr_row);
+                }
+#endif
             } else {
                 any_accepted = 1;
                 if (vi < (unsigned long)SEL_REJECT_CACHE) {
@@ -587,6 +638,11 @@ int tlv_select_run(WhdSelectResult             *out,
             const WhdSelectionLane *lane       = &plan.lanes[li];
             unsigned long           best_idx   = WHD_NO_SELECTION;
             unsigned long           best_score = 0u;
+#if WHDTLV_ENABLE_SELECTION_TRACE
+            unsigned long trace_elig_idx[TRACE_ELIG_MAX];
+            unsigned long trace_elig_score[TRACE_ELIG_MAX];
+            unsigned int  trace_elig_count = 0u;
+#endif
 
             for (vi = 0u; vi < grp->variant_count; vi++) {
                 unsigned long         arr_idx;
@@ -615,11 +671,41 @@ int tlv_select_run(WhdSelectResult             *out,
                 /* Duplicate suppression: skip if already selected for
                  * this group in a previous lane.                        */
                 if (is_already_selected(group_sel, group_sel_count, arr_idx)) {
+#if WHDTLV_ENABLE_SELECTION_TRACE
+                    if (trace) {
+                        WhdTlvSelectionTraceRow tr_row;
+                        memset(&tr_row, 0, sizeof(tr_row));
+                        tr_row.group_index           = g;
+                        tr_row.variant_index         = arr_idx;
+                        tr_row.lane_index            = (unsigned long)li;
+                        tr_row.group_id              = (unsigned short)grp->group_id;
+                        tr_row.duplicate_suppressed  = 1;
+                        tr_row.lost_to_variant_index = 0xFFFFFFFFul;
+                        tr_row.reject_field_index    = 0xFFu;
+                        tr_row.reason                = WHDTLV_TRACE_REASON_DUPLICATE_SUPPRESSED;
+                        whdtlv_trace_add_row(trace, &tr_row);
+                    }
+#endif
                     continue;
                 }
 
                 /* Lane eligibility check */
                 if (!variant_matches_lane(v, profile, lane)) {
+#if WHDTLV_ENABLE_SELECTION_TRACE
+                    if (trace) {
+                        WhdTlvSelectionTraceRow tr_row;
+                        memset(&tr_row, 0, sizeof(tr_row));
+                        tr_row.group_index           = g;
+                        tr_row.variant_index         = arr_idx;
+                        tr_row.lane_index            = (unsigned long)li;
+                        tr_row.group_id              = (unsigned short)grp->group_id;
+                        tr_row.eligible              = 0;
+                        tr_row.lost_to_variant_index = 0xFFFFFFFFul;
+                        tr_row.reject_field_index    = 0xFFu;
+                        tr_row.reason                = WHDTLV_TRACE_REASON_NOT_LANE_ELIGIBLE;
+                        whdtlv_trace_add_row(trace, &tr_row);
+                    }
+#endif
                     continue;
                 }
 
@@ -636,8 +722,47 @@ int tlv_select_run(WhdSelectResult             *out,
                     best_idx   = arr_idx;
                     best_score = vs.score;
                 }
+#if WHDTLV_ENABLE_SELECTION_TRACE
+                /* Accumulate eligible variants for winner/loser rows.   */
+                if (trace && trace_elig_count < TRACE_ELIG_MAX) {
+                    trace_elig_idx[trace_elig_count]   = arr_idx;
+                    trace_elig_score[trace_elig_count] = vs.score;
+                    trace_elig_count++;
+                }
+#endif
             }
 
+#if WHDTLV_ENABLE_SELECTION_TRACE
+            /* Emit winner and loser trace rows for every eligible variant. */
+            if (trace) {
+                unsigned int tei;
+                for (tei = 0u; tei < trace_elig_count; tei++) {
+                    WhdTlvSelectionTraceRow tr_row;
+                    memset(&tr_row, 0, sizeof(tr_row));
+                    tr_row.group_index        = g;
+                    tr_row.variant_index      = trace_elig_idx[tei];
+                    tr_row.lane_index         = (unsigned long)li;
+                    tr_row.group_id           = (unsigned short)grp->group_id;
+                    tr_row.eligible           = 1;
+                    tr_row.score_total        = trace_elig_score[tei];
+                    tr_row.reject_field_index = 0xFFu;
+                    if (best_idx != WHD_NO_SELECTION
+                            && trace_elig_idx[tei] == best_idx) {
+                        tr_row.selected          = 1;
+                        tr_row.reason            = WHDTLV_TRACE_REASON_WINNER;
+                        tr_row.lost_to_variant_index = 0xFFFFFFFFul;
+                    } else if (best_idx != WHD_NO_SELECTION) {
+                        tr_row.reason                = WHDTLV_TRACE_REASON_LOST_SCORE;
+                        tr_row.lost_to_score         = best_score;
+                        tr_row.lost_to_variant_index = best_idx;
+                    } else {
+                        tr_row.reason                = WHDTLV_TRACE_REASON_NO_SCORE;
+                        tr_row.lost_to_variant_index = 0xFFFFFFFFul;
+                    }
+                    whdtlv_trace_add_row(trace, &tr_row);
+                }
+            }
+#endif
             if (best_idx != WHD_NO_SELECTION) {
                 entry->selected_indices[entry->lane_selected_count] = best_idx;
                 entry->lane_selected_count++;
@@ -669,6 +794,35 @@ int tlv_select_run(WhdSelectResult             *out,
 
     return WHD_FILTER_OK;
 }
+
+/*========================================================================*/
+/* Public wrappers                                                        */
+/*========================================================================*/
+
+int tlv_select_run(WhdSelectResult             *out,
+                   const WhdGroupSet           *gs,
+                   const WhdVariantArray       *arr,
+                   const WhdBoundProfile       *profile,
+                   const WhdGroupAllowList     *allow)
+{
+#if WHDTLV_ENABLE_SELECTION_TRACE
+    return tlv_select_run_impl(out, gs, arr, profile, allow, NULL);
+#else
+    return tlv_select_run_impl(out, gs, arr, profile, allow);
+#endif
+}
+
+#if WHDTLV_ENABLE_SELECTION_TRACE
+int tlv_select_run_traced(WhdSelectResult             *out,
+                           const WhdGroupSet           *gs,
+                           const WhdVariantArray       *arr,
+                           const WhdBoundProfile       *profile,
+                           const WhdGroupAllowList     *allow,
+                           WhdTlvSelectionTrace        *trace)
+{
+    return tlv_select_run_impl(out, gs, arr, profile, allow, trace);
+}
+#endif /* WHDTLV_ENABLE_SELECTION_TRACE */
 
 /*------------------------------------------------------------------------*/
 

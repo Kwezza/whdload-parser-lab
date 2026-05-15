@@ -19,6 +19,7 @@
  */
 
 #include "whdtlv/reporting/whdtlv_report_csv.h"
+#include "whdtlv/reporting/whdtlv_report_profile.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,9 +37,12 @@ static void print_usage(const char *prog)
     printf("Options:\n");
     printf("  --defs <dir>        Asset CSV definitions directory  [default: assets_raw/defs]\n");
     printf("  --out <path>        Output CSV file path             [default: <tlv>.csv]\n");
-    printf("  --mode wide|long    Export layout                    [default: wide]\n");
-    printf("                        wide = one row per variant; multi-values joined with ;\n");
-    printf("                        long = one row per stored field value\n");
+    printf("  --mode wide|long|profile  Export layout             [default: wide]\n");
+    printf("                        wide    = one row per variant; multi-values joined with ;\n");
+    printf("                        long    = one row per stored field value\n");
+    printf("                        profile = selection trace report (requires --profile)\n");
+    printf("  --profile <path>    Profile file (.profile) for profile mode\n");
+    printf("  --search <pattern>  Group search pattern for profile mode\n");
     printf("  --include-ids       Add extra _ids columns with raw numeric token IDs\n");
     printf("  --include-desc      Add extra _descriptions columns with long CSV descriptions\n");
     printf("  --include-status    Add extra _status columns with resolution status codes\n");
@@ -149,9 +153,12 @@ static void print_summary(const WhdTlvReportSummary *s, const char *out_path)
 
 int main(int argc, char **argv)
 {
-    const char          *tlv_path   = NULL;
-    const char          *defs_dir   = "assets_raw/defs";
-    const char          *out_path   = NULL;
+    const char          *tlv_path       = NULL;
+    const char          *defs_dir       = "assets_raw/defs";
+    const char          *out_path       = NULL;
+    const char          *profile_path   = NULL;
+    const char          *search_pattern = NULL;
+    int                  mode_is_profile = 0;
     char                 out_buf[1024];
     WhdTlvReportOptions  opts;
     WhdTlvReportSummary  sum;
@@ -196,8 +203,10 @@ int main(int argc, char **argv)
                 opts.mode = WHDTLV_REPORT_CSV_WIDE;
             } else if (strcmp(argv[i], "long") == 0) {
                 opts.mode = WHDTLV_REPORT_CSV_LONG;
+            } else if (strcmp(argv[i], "profile") == 0) {
+                mode_is_profile = 1;
             } else {
-                fprintf(stderr, "error: --mode must be 'wide' or 'long', got '%s'\n", argv[i]);
+                fprintf(stderr, "error: --mode must be 'wide', 'long', or 'profile', got '%s'\n", argv[i]);
                 return 1;
             }
         }
@@ -219,6 +228,20 @@ int main(int argc, char **argv)
         else if (strcmp(argv[i], "--problems-only") == 0) {
             opts.only_problem_rows = 1;
         }
+        else if (strcmp(argv[i], "--profile") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --profile requires an argument\n");
+                return 1;
+            }
+            profile_path = argv[++i];
+        }
+        else if (strcmp(argv[i], "--search") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "error: --search requires an argument\n");
+                return 1;
+            }
+            search_pattern = argv[++i];
+        }
         else {
             fprintf(stderr, "error: unknown option '%s'\n", argv[i]);
             fprintf(stderr, "       run with --help for usage\n");
@@ -237,6 +260,64 @@ int main(int argc, char **argv)
         out_buf[0] = '\0';
         derive_output_path(tlv_path, out_buf, sizeof(out_buf));
         out_path = out_buf;
+    }
+
+    /* ---- Profile mode dispatch ---- */
+    if (mode_is_profile) {
+        WhdTlvProfileReportOptions prof_opts;
+        WhdTlvProfileReportSummary prof_sum;
+        const char *reason;
+
+        if (!profile_path || profile_path[0] == '\0') {
+            fprintf(stderr, "error: --mode profile requires --profile <path>\n");
+            fprintf(stderr, "       run with --help for usage\n");
+            return 1;
+        }
+
+        memset(&prof_opts, 0, sizeof(prof_opts));
+        prof_opts.tlv_path        = tlv_path;
+        prof_opts.defs_dir        = defs_dir;
+        prof_opts.profile_path    = profile_path;
+        prof_opts.search_pattern  = search_pattern;
+        prof_opts.output_csv_path = out_path;
+
+        printf("whdtlv_report: reading '%s'\n", tlv_path);
+        printf("  defs    : %s\n", defs_dir);
+        printf("  profile : %s\n", profile_path);
+        printf("  out     : %s\n", out_path);
+        printf("  mode    : profile\n");
+        if (search_pattern && search_pattern[0] != '\0')
+            printf("  search  : %s\n", search_pattern);
+
+        memset(&prof_sum, 0, sizeof(prof_sum));
+        rc = whdtlv_report_profile_file(&prof_opts, &prof_sum);
+
+        if (rc != WHDTLV_PROFILE_REPORT_OK) {
+            switch (rc) {
+            case WHDTLV_PROFILE_REPORT_ERR_BAD_ARG:   reason = "bad argument";                break;
+            case WHDTLV_PROFILE_REPORT_ERR_TLV_OPEN:  reason = "could not open TLV file";    break;
+            case WHDTLV_PROFILE_REPORT_ERR_TLV_PARSE: reason = "TLV structure is invalid";   break;
+            case WHDTLV_PROFILE_REPORT_ERR_CSV_OPEN:  reason = "could not open output file"; break;
+            case WHDTLV_PROFILE_REPORT_ERR_OOM:       reason = "out of memory";               break;
+            case WHDTLV_PROFILE_REPORT_ERR_PROFILE:   reason = "profile load failed";         break;
+            default:                                   reason = "unknown error";               break;
+            }
+            fprintf(stderr, "error: %s (rc=%d)\n", reason, rc);
+            return (rc <= WHDTLV_PROFILE_REPORT_ERR_OOM) ? 6 : to_exit_code(rc);
+        }
+
+        printf("\n--- Profile export summary ---\n");
+        printf("  Output file       : %s\n", out_path);
+        printf("  Groups scanned    : %lu\n", prof_sum.groups_total);
+        printf("  Variants scanned  : %lu\n", prof_sum.variants_total);
+        printf("  Rows written      : %lu\n", prof_sum.rows_written);
+        printf("  Winners           : %lu\n", prof_sum.winners);
+        printf("  Losers            : %lu\n", prof_sum.losers);
+        printf("  Rejected          : %lu\n", prof_sum.rejected);
+        printf("  Not eligible      : %lu\n", prof_sum.not_eligible);
+        printf("  Dup-suppressed    : %lu\n", prof_sum.dup_suppressed);
+        printf("------------------------------\n");
+        return 0;
     }
 
     printf("whdtlv_report: reading '%s'\n", tlv_path);

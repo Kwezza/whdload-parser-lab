@@ -93,6 +93,25 @@ void tlv_select_score_variant(WhdVariantScore       *out,
 /* Release memory owned by out.  Does not free out itself. */
 void tlv_select_free(WhdSelectResult *out);
 
+/*------------------------------------------------------------------------*/
+/* Optional trace API (host/reporting-only)                               */
+
+#if WHDTLV_ENABLE_SELECTION_TRACE
+#include "whdtlv/filtering/tlv_select_trace.h"
+
+/* Like tlv_select_run() but also fills *trace with per-variant decision
+ * records (rejections, lane eligibility, dup-suppression, winners, losers).
+ * trace must be initialised with whdtlv_trace_init() before calling.
+ * Selection results are identical to tlv_select_run() for the same inputs.
+ * Returns WHD_FILTER_OK or a negative error code. */
+int tlv_select_run_traced(WhdSelectResult             *out,
+                           const WhdGroupSet           *gs,
+                           const WhdVariantArray       *arr,
+                           const WhdBoundProfile       *profile,
+                           const WhdGroupAllowList     *allow,
+                           WhdTlvSelectionTrace        *trace);
+#endif /* WHDTLV_ENABLE_SELECTION_TRACE */
+
 #ifdef __cplusplus
 }
 #endif
