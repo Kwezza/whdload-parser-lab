@@ -1,4 +1,7 @@
-#ID, Filename tag, description, is default?
+# Only cracker groups that are currently list in the 
+# Retroplay's archives are used.
+#
+# ID, Filename tag, description, is default?
 1,Paradox,Paradox
 2,Prestige,Prestige
 3,Rebels,Rebels
