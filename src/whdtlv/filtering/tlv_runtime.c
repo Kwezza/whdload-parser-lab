@@ -5,11 +5,11 @@
  *
  * Parses the top-level blocks from the loaded TLV buffer:
  *
- *   Block 0x01  Metadata map  (field_id -> name pairs, LE 2-byte size)
- *   Block 0x04  CSV CRC fingerprints (LE 2-byte size + 2-byte count + entries)
+ *   Block 0x01  Metadata map  (field_id -> name pairs, BE 2-byte size)
+ *   Block 0x04  CSV CRC fingerprints (BE 2-byte size + 2-byte count + entries)
  *   0x04..0xFF  Dynamic data records  (data_offset marks their start)
  *
- * All multi-byte values are little-endian (matches the existing writer).
+ * All multi-byte values are big-endian (Motorola byte order, native to the 68000).
  */
 
 #include "whdtlv/filtering/tlv_runtime.h"
@@ -26,27 +26,11 @@
  * any data records, so parsing order disambiguates. */
 
 /*------------------------------------------------------------------------*/
-/* Internal little-endian helpers                                         */
-
-static uint16_t u16_le(const uint8_t *p)
-{
-    return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
-}
-
-static uint32_t u32_le(const uint8_t *p)
-{
-    return (uint32_t)p[0]         |
-           ((uint32_t)p[1] <<  8) |
-           ((uint32_t)p[2] << 16) |
-           ((uint32_t)p[3] << 24);
-}
-
-/*------------------------------------------------------------------------*/
 /* Field map parser (type 0x01 block)                                    */
 /*
  * Wire layout:
  *   [1]  type byte  (already consumed before calling this)
- *   [2]  map_size   LE  -- payload byte count
+ *   [2]  map_size   BE  -- payload byte count
  *   ...  entries until map_size bytes consumed:
  *          [1]  field_id
  *          [N+1] NUL-terminated field_name
@@ -66,7 +50,7 @@ static int parse_field_map(TlvRuntime *rt, unsigned long *pos)
     if (*pos + 2u > sz) {
         return WHD_FILTER_ERR_TLV_HEADER;
     }
-    map_size = u16_le(buf + *pos);
+    map_size = tlv_read_u16_be(buf + *pos);
     *pos += 2u;
 
     end   = *pos + map_size;
@@ -118,11 +102,11 @@ static int parse_field_map(TlvRuntime *rt, unsigned long *pos)
 /*
  * Wire layout:
  *   [1]  type byte  (already consumed before calling this)
- *   [2]  payload_size  LE
- *   [2]  count         LE
+ *   [2]  payload_size  BE
+ *   [2]  count         BE
  *   per entry:
  *     [N+1]  NUL-terminated csv_name
- *     [4]    crc32  LE
+ *     [4]    crc32  BE
  */
 
 static int parse_crc_block(TlvRuntime *rt, unsigned long *pos)
@@ -139,7 +123,7 @@ static int parse_crc_block(TlvRuntime *rt, unsigned long *pos)
     if (*pos + 2u > sz) {
         return WHD_FILTER_ERR_TLV_HEADER;
     }
-    payload_size = u16_le(buf + *pos);
+    payload_size = tlv_read_u16_be(buf + *pos);
     *pos += 2u;
 
     end = *pos + payload_size;
@@ -147,7 +131,7 @@ static int parse_crc_block(TlvRuntime *rt, unsigned long *pos)
     if (*pos + 2u > sz) {
         return WHD_FILTER_ERR_TLV_HEADER;
     }
-    count = u16_le(buf + *pos);
+    count = tlv_read_u16_be(buf + *pos);
     *pos += 2u;
 
     if (count == 0u) {
@@ -180,11 +164,11 @@ static int parse_crc_block(TlvRuntime *rt, unsigned long *pos)
         memcpy(rt->crc_map.entries[i].csv_name, buf + name_start, name_len);
         rt->crc_map.entries[i].csv_name[name_len] = '\0';
 
-        /* 4-byte LE CRC */
+        /* 4-byte BE CRC */
         if (*pos + 4u > sz) {
             break;
         }
-        rt->crc_map.entries[i].crc32 = u32_le(buf + *pos);
+        rt->crc_map.entries[i].crc32 = tlv_read_u32_be(buf + *pos);
         *pos += 4u;
     }
 
@@ -200,18 +184,13 @@ static int parse_crc_block(TlvRuntime *rt, unsigned long *pos)
 /*
  * Wire layout (written by tlv_write_group_map):
  *   [1]  type byte  (already consumed before calling this)
- *   [2]  payload_size  LE
- *   [2]  group_count   LE
+ *   [2]  payload_size  BE
+ *   [2]  group_count   BE
  *   per entry:
  *     [2]  group_id   BE
  *     [1]  name_len
  *     [name_len bytes]  group_name (no NUL terminator in file)
  */
-
-static uint16_t u16_be(const uint8_t *p)
-{
-    return (uint16_t)(((uint16_t)p[0] << 8) | (uint16_t)p[1]);
-}
 
 static int parse_group_map(TlvRuntime *rt, unsigned long *pos)
 {
@@ -225,7 +204,7 @@ static int parse_group_map(TlvRuntime *rt, unsigned long *pos)
     if (*pos + 2u > sz) {
         return WHD_FILTER_ERR_TLV_HEADER;
     }
-    payload_size = u16_le(buf + *pos);
+    payload_size = tlv_read_u16_be(buf + *pos);
     *pos += 2u;
 
     end = *pos + payload_size;
@@ -233,7 +212,7 @@ static int parse_group_map(TlvRuntime *rt, unsigned long *pos)
     if (*pos + 2u > sz) {
         return WHD_FILTER_ERR_TLV_HEADER;
     }
-    count = u16_le(buf + *pos);
+    count = tlv_read_u16_be(buf + *pos);
     *pos += 2u;
 
     if (count == 0u) {
@@ -259,7 +238,7 @@ static int parse_group_map(TlvRuntime *rt, unsigned long *pos)
         if (*pos + 2u > sz) {
             break;
         }
-        gid    = u16_be(buf + *pos);
+        gid    = tlv_read_u16_be(buf + *pos);
         *pos  += 2u;
 
         /* 1-byte name length */

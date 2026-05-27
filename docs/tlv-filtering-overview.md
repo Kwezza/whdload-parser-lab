@@ -48,25 +48,24 @@ used when the TLV was built.  These are checked in Stage 2.
 The byte position immediately following the last header block is recorded as `data_offset`.  All
 subsequent reads for variant data start from that position.
 
-**Endian reference table.**  The TLV format uses a mixed-endian convention.  All framing and
-scalar fields are listed below for reference.
+**Endian reference table.**  The TLV format is uniformly big-endian (Motorola byte order),
+matching the native 68000 word order.  All framing and scalar fields are listed below for
+reference.
 
 | Field | Width | Encoding |
 |---|---|---|
-| Record `value_length` | uint16 | **LE** |
-| Block `payload_size` | uint16 | **LE** |
-| Block entry `count` | uint16 | **LE** |
-| CRC-32 fingerprint values (block 0x04) | uint32 | **LE** |
-| Token IDs stored in data records | uint32 | **LE** |
+| Record `value_length` | uint16 | **BE** |
+| Block `payload_size` | uint16 | **BE** |
+| Block entry `count` | uint16 | **BE** |
+| CRC-32 fingerprint values (block 0x04) | uint32 | **BE** |
+| Token IDs stored in data records | uint32 | **BE** |
 | `group_id` value (field 0x05) | uint16 | **BE** |
 | `archive_info` numeric fields (size\_kib, crc32) | uint32 | **BE** |
 
-Structural framing fields and token IDs are little-endian because they were committed early
-when the x86 builder wrote host-native integers directly.  The runtime applies explicit
-`read_u16_le` / `read_u32_le` decodes so the encoding is unambiguous, not platform-dependent.
-`group_id` and `archive_info` were added later with explicit big-endian encoding to match the
-Motorola 68k native word order, allowing the Amiga runtime to read those two fields without
-byte-swapping.  All other numeric fields require the LE decode.
+All multi-byte fields are big-endian.  The x86 builder applies explicit byte-swap helpers
+(`write_u16_be`, `write_u32_be`) before every multi-byte `fwrite` so the on-disk format is
+Amiga-native regardless of the build host.  The runtime uses `tlv_read_u16_be` and
+`tlv_read_u32_be` to decode every numeric field without host-native assumptions.
 
 ---
 
@@ -278,7 +277,7 @@ the profile at load time with a clear error; lanes are never silently truncated.
 ### Scoring a variant
 
 For each bound field the scorer iterates over every field entry the variant carries with the
-matching field ID.  Token ID values are stored as 4-byte little-endian uint32 (see endian table
+matching field ID.  Token ID values are stored as 4-byte big-endian uint32 (see endian table
 in Stage 1).  For each token the scorer:
 
 1. Checks the exclude list — an exclude hit immediately rejects the entire variant.
@@ -422,13 +421,12 @@ matched against the `base_name` string derived from `display_name` by the same h
 grouper uses.  No code path requires both the group map and the `group_id` field to be present;
 either one is sufficient for correct search behaviour.
 
-**Mixed-endian convention is intentional and stable.**  Structural framing fields
-(`value_length`, block `payload_size`, block `count`) and token ID values are little-endian
-because they were frozen early when the x86 builder wrote host-native integers directly.
-`group_id` and `archive_info` fields were added later with explicit big-endian encoding so the
-Amiga runtime can read them without byte-swapping.  No further changes to the token-ID encoding
-are planned: any future numeric payload introduced for Amiga-direct access should use explicit
-big-endian encoding from the start; scalar framing fields remain LE.
+**All multi-byte fields are big-endian.**  The format was unified as part of the
+endianness-divergence remediation (2026-05-27).  All structural framing fields
+(`value_length`, block `payload_size`, block `count`), token ID values, and
+`archive_info` fields are written with explicit big-endian helpers in the x86 builder and
+decoded with explicit big-endian helpers in the runtime.  Any future numeric payload must
+use explicit big-endian encoding from the start.
 
 **First-encountered wins on ties.**  The secondary sort key on `original_index` makes `qsort`
 deterministic within a group.  The strict greater-than comparison in the selector (`score >

@@ -849,7 +849,7 @@ EmpireStrikesBack_v1.2_1235
 EnchantedLand_v1.4_3063
 Encounter_v1.2_0651
 Enemy2MissingInAction_v1.2_De
-EnemyTempestOfViolence_v1.2_EasyPlay_De
+EnemyTempestOfViolence_v1.2_De
 Enforcer_v2.0_2962
 EnglandChampionshipSpecial_v1.1_1671
 EnigmeAOxford_v1.1
@@ -958,7 +958,7 @@ Firepower_v1.0_0061
 Firestar_v2.0_2978
 FirstContact_v1.1_0923
 FirstPersonPinball_v1.0_0418
-FirstSamurai_v2.1_A1200Version_NONAGA
+FirstSamurai_v2.1_1182
 Fish_v1.0_0271
 FistFighter_v1.0
 FiveASideSoccer_v1.2
@@ -1075,7 +1075,7 @@ Gladiators_v1.0
 GlobalGladiators_v1.5_0657
 GlobalTrek_v1.1
 Globdule_v2.2_0183
-Globulus_v2.1a_PreRelease
+Globulus_v2.1a
 GLOCR360_v1.2_0184
 Gloom_v1.4_AGA_0124
 GloomDemo_v1.1_AGA
@@ -1460,7 +1460,7 @@ LeisureSuitLarry_v1.0_0349
 LeisureSuitLarryEnhanced_v1.1_MT32
 Lemmings2_v1.8_1MB_NTSC_1976
 Lemmings2Demo_v1.0_0786
-Lemmings_v1.5_Files_AltLevels_2238
+Lemmings_v1.5_Files_NTSC_0901
 LemmingsDemo_v1.0
 LemmingsHoliday1993_v1.3_0337
 LemmingsHoliday1994_v1.3_0492
@@ -1468,7 +1468,7 @@ LemmingsHolidayDemo_v1.1
 LemmingsNewYear9192_v1.0
 LemmingsXmasDemo1991_v1.1
 LemmingsXmasDemo1992_v1.0
-Leonardo_v1.1_DOS
+Leonardo_v1.1_HighDensity
 LesManleyInSearchForTheKing_v1.3_2671
 LEssentialMathsNiveau6eme_v1.0_Fr
 LethalWeapon_v2.1_0814
@@ -1644,7 +1644,7 @@ MissilesOverXerion_v1.2_2625
 MissionElevator_v1.1_1282
 MixedUpMotherGoose_v1.0_2680
 Moebius_v1.0_NTSC_1385
-MonkeyBusiness_v1.0_A1000
+MonkeyBusiness_v1.0
 MonkeyIsland2_v1.3_De_0077
 MonsterBusiness_v1.4_3032
 MontyPythonsFlyingCircus_v1.3_NTSC_1174
@@ -1853,7 +1853,7 @@ PinballIllusionsDemo_v1.0_AGA
 PinballMagic_v1.1_2003
 PinballMania_v2.1_AGA_0896
 PinballPrelude_v1.2_AGA_2327
-PinballWizard_v1.0_Prerelease
+PinballWizard_v1.0
 Pinkie_v1.2b_1774
 PinkPanther_v1.1_0236
 Pinomania_v1.0
@@ -2093,7 +2093,7 @@ Ruesselsheim_v1.1_AGA_De_2215
 Ruff&amp;ReddyInTheSpaceAdventure_v1.1
 Ruffian_v2.0_2411
 RuffNTumble_v2.8_512k_0199
-RugbyTheWorldCup_v1.2_EarlyBuild_3730
+RugbyTheWorldCup_v1.2_0258
 RunningMan_v1.1_0382
 RunTheGauntlet_v1.1_1250
 Rushhour_v1.0
@@ -2851,7 +2851,7 @@ WorldsOfLegend_v1.1_1974
 WorldTourGolf_v1.0_0752
 WorldTrophySoccer_v0.1_Arcadia
 Worms_v1.0_1MB_0230
-WormsDirectorsCut_v1.3_AGA_12MB_0605
+WormsDirectorsCut_v1.3_AGA_8MB_0605
 Wormsigns_v1.0
 WPotrzasku_v1.1_Pl
 Wrangler_v1.0_2980

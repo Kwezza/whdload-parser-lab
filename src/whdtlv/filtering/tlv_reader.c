@@ -3,12 +3,11 @@
  * Copyright (C) 2026 Kerry Thompson
  * SPDX-License-Identifier: MIT
  *
- * The existing TLV writer uses raw fwrite() on host (x86/x64), so all
- * multi-byte fields on disk are little-endian.  The read helpers below
- * follow the same byte order to match actual on-disk data.
- *
- * The plan's "big-endian" comment describes the aspirational Amiga-native
- * format; the current files produced by tlv_builder.c are little-endian.
+ * All multi-byte fields are big-endian (Motorola byte order), matching the
+ * native 68000 word order.  The x86 builder applies explicit write_u16_be /
+ * write_u32_be helpers before every multi-byte fwrite.  The read helpers
+ * below use tlv_read_u16_be() and tlv_read_u32_be() to decode every
+ * numeric field without host-native assumptions.
  *
  * TLV type-byte constants (from tlv_builder.h):
  *   0x01  metadata map (field_id -> name table)

@@ -621,8 +621,13 @@ ProcessingResult contributor_extractor_process(const char *filename,
             /* Add contributor to TLV record */
             uint8_t contributor_field_id = field_registry_get_id(field_registry, "contributors");
             if (contributor_field_id != 0) {
+                uint8_t contributor_id_be[4]; /* stored as big-endian uint32 */
+                contributor_id_be[0] = (uint8_t)(contributor_id >> 24);
+                contributor_id_be[1] = (uint8_t)(contributor_id >> 16);
+                contributor_id_be[2] = (uint8_t)(contributor_id >>  8);
+                contributor_id_be[3] = (uint8_t)(contributor_id & 0xFF);
                 tlv_record_add_entry(output_record, contributor_field_id,
-                                   (const uint8_t*)&contributor_id, sizeof(contributor_id));
+                                   contributor_id_be, 4);
 #if PLATFORM_AMIGA
                 whdtlv_log_append("Added contributor '%s' ID %lu to TLV record (field_id=0x%02X)",
                              contributor_phrase, (unsigned long)contributor_id, contributor_field_id);
@@ -824,8 +829,13 @@ static ProcessingResult prescan_and_strip_tokens(const char *filename,
                     if (id > 0) {
                     /* Add TLV entry storing the ID */
                     if (cfg->field_id != 0) {
+                        uint8_t id_be[4]; /* stored as big-endian uint32 */
+                        id_be[0] = (uint8_t)(id >> 24);
+                        id_be[1] = (uint8_t)(id >> 16);
+                        id_be[2] = (uint8_t)(id >>  8);
+                        id_be[3] = (uint8_t)(id & 0xFF);
                         tlv_record_add_entry(output_record, cfg->field_id,
-                                             (const uint8_t *)&id, sizeof(id));
+                                             id_be, 4);
                     }
                     /* Targeted, low-noise debug for known sample names */
                     if (is_debug_filename) {
@@ -1169,8 +1179,11 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
 #endif
                     /* Add language bitfield to TLV record */
                     if (language_field_id != 0) {
+                        uint8_t lang_be[2]; /* no current read path; stored as big-endian uint16 */
+                        lang_be[0] = (uint8_t)(language_bitfield >> 8);
+                        lang_be[1] = (uint8_t)(language_bitfield & 0xFF);
                         tlv_record_add_entry(output_record, language_field_id,
-                                           (const uint8_t*)&language_bitfield, sizeof(language_bitfield));
+                                           lang_be, 2);
 #if PLATFORM_AMIGA
                         whdtlv_log_append("Added language bitfield 0x%04X to TLV record (field_id=0x%02X)",
                                      language_bitfield, language_field_id);
@@ -1206,8 +1219,13 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
                         }
                         if (digits_only) {
                             uint32_t sps_id = (uint32_t)atoi(part_buf);
+                            uint8_t sps_be[4]; /* no current read path; stored as big-endian uint32 */
+                            sps_be[0] = (uint8_t)(sps_id >> 24);
+                            sps_be[1] = (uint8_t)(sps_id >> 16);
+                            sps_be[2] = (uint8_t)(sps_id >>  8);
+                            sps_be[3] = (uint8_t)(sps_id & 0xFF);
                             tlv_record_add_entry(output_record, sps_field_id,
-                                                (const uint8_t*)&sps_id, sizeof(sps_id));
+                                                sps_be, 4);
 #if PLATFORM_AMIGA
                             whdtlv_log_append("Added SPS ID %lu to TLV record (field_id=0x%02X)", (unsigned long)sps_id, sps_field_id);
 #endif
@@ -1299,8 +1317,13 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
 #endif
                                 /* Add CSV token ID to TLV record */
                                 if (csv_field_id != 0) {
+                                    uint8_t token_id_be[4]; /* stored as big-endian uint32 */
+                                    token_id_be[0] = (uint8_t)(token_id >> 24);
+                                    token_id_be[1] = (uint8_t)(token_id >> 16);
+                                    token_id_be[2] = (uint8_t)(token_id >>  8);
+                                    token_id_be[3] = (uint8_t)(token_id & 0xFF);
                                     tlv_record_add_entry(output_record, csv_field_id,
-                                                       (const uint8_t*)&token_id, sizeof(token_id));
+                                                       token_id_be, 4);
 #if PLATFORM_AMIGA
                                     whdtlv_log_append("Added %s token ID %lu to TLV record (field_id=0x%02X)",
                                                  csv_name, (unsigned long)token_id, csv_field_id);
@@ -1332,8 +1355,13 @@ ProcessingResult tlv_process_filename_orchestrator(const char *filename,
 #endif
                         /* Add CSV token ID to TLV record */
                         if (csv_field_id != 0) {
+                            uint8_t token_id_be[4]; /* stored as big-endian uint32 */
+                            token_id_be[0] = (uint8_t)(token_id >> 24);
+                            token_id_be[1] = (uint8_t)(token_id >> 16);
+                            token_id_be[2] = (uint8_t)(token_id >>  8);
+                            token_id_be[3] = (uint8_t)(token_id & 0xFF);
                             tlv_record_add_entry(output_record, csv_field_id,
-                                               (const uint8_t*)&token_id, sizeof(token_id));
+                                               token_id_be, 4); /* stored as big-endian uint32 */
 #if PLATFORM_AMIGA
                             whdtlv_log_append("Added %s token ID %lu to TLV record (field_id=0x%02X)",
                                          csv_name, (unsigned long)token_id, csv_field_id);

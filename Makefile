@@ -87,11 +87,13 @@ endif
 ifeq ($(TARGET),amiga)
 	BIN_TEST_FILTER := $(BUILD_DIR)/test_filter_facade
 	TEST_FILTER_RUN := @echo Amiga test binary built: $(subst /,\,$(BUILD_DIR))\test_filter_facade -- run on device with STACK 100000
+	BIN_TEST_ENDIAN := $(BUILD_DIR)/test_amiga_endian
 else
 	BIN_TEST_FILTER := $(BUILD_DIR)/test_filter_facade.exe
 	TEST_FILTER_RUN := $(subst /,\,$(BIN_TEST_FILTER))
 	BIN_REPORT := $(BUILD_DIR)/whdtlv_report.exe
 	BIN_TEST_REPORT := $(BUILD_DIR)/test_report_csv.exe
+	BIN_TEST_ENDIAN := $(BUILD_DIR)/test_amiga_endian.exe
 endif
 
 # Objects shared by all binaries (everything except the main entry points)
@@ -99,6 +101,12 @@ LIB_OBJ := $(filter-out $(BUILD_DIR)/tools_src/dat_to_tlv_main.o,$(OBJ))
 
 TEST_FILTER_OBJ := $(LIB_OBJ) \
                    $(BUILD_DIR)/tests/filtering/test_filter_facade.o
+
+TEST_ENDIAN_OBJ := $(LIB_OBJ) \
+                   $(BUILD_DIR)/tests/filtering/test_amiga_endian.o
+
+FH_OBJ := $(LIB_OBJ) \
+           $(BUILD_DIR)/tools_src/filter_harness/main.o
 
 # Reporting subsystem (host-only)
 REPORT_SRC := src/whdtlv/reporting/whdtlv_report_csv.c
@@ -170,7 +178,9 @@ help:
 	@echo   make amiga           - Shortcut for Amiga build
 	@echo   make run             - Run host binary when TARGET=host
 	@echo   make demo            - Build the facade demo program -^> build\host\tlv_demo.exe
-	@echo   make test-filter     - Build and run the public filter facade tests
+	@echo   make test-filter       - Build and run the public filter facade tests
+	@echo   make test-amiga-endian - Build and run the Amiga endianness cross-validation tests
+	@echo   make filter          - Build the filter_harness fixture discovery tool ^(host only^)
 	@echo   make report          - Build the host-side TLV CSV export tool ^(host only^)
 	@echo   make test-report     - Build and run the reporting subsystem tests ^(host only^)
 	@echo   make test-language   - Build and run the language token validation tests ^(host only^)
@@ -212,12 +222,30 @@ $(BIN_TEST_FILTER): $(TEST_FILTER_OBJ)
 	@$(call MKDIR_CMD,$(BUILD_DIR))
 	$(CC) $(CFLAGS) -o $@ $(TEST_FILTER_OBJ) $(LDFLAGS)
 
+test-amiga-endian: $(BIN_TEST_ENDIAN)
+ifeq ($(TARGET),amiga)
+	@echo Amiga endian test binary: $(subst /,\,$(BIN_TEST_ENDIAN)) -- run on device with STACK 100000
+else
+	$(subst /,\,$(BIN_TEST_ENDIAN))
+endif
+
+$(BIN_TEST_ENDIAN): $(TEST_ENDIAN_OBJ)
+	@$(call MKDIR_CMD,$(BUILD_DIR))
+	$(CC) $(CFLAGS) -o $@ $(TEST_ENDIAN_OBJ) $(LDFLAGS)
+
 ifneq ($(TARGET),amiga)
 report: $(BIN_REPORT)
 
 $(BIN_REPORT): $(REPORT_TOOL_OBJ)
 	@$(call MKDIR_CMD,$(BUILD_DIR))
 	$(CC) $(TRACE_CFLAGS) -o $@ $(REPORT_TOOL_OBJ) $(LDFLAGS)
+
+filter: $(BIN_FH)
+	@echo filter_harness built: $(subst /,\,$(BIN_FH))
+
+$(BIN_FH): $(FH_OBJ)
+	@$(call MKDIR_CMD,$(BUILD_DIR))
+	$(CC) $(CFLAGS) -o $@ $(FH_OBJ) $(LDFLAGS)
 
 # Trace-enabled copy of tlv_select.c (needed by tlv_select_run_traced)
 $(TRACE_SELECT_OBJ): src/whdtlv/filtering/tlv_select.c
@@ -282,4 +310,6 @@ test-effective:
 	@echo test-effective target is host-only. Use TARGET=host.
 test-profile:
 	@echo test-profile target is host-only. Use TARGET=host.
+filter:
+	@echo filter target is host-only. Use TARGET=host.
 endif

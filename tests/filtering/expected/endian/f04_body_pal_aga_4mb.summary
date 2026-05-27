@@ -1,0 +1,9 @@
+profile=assets_raw\profiles\pal_aga_4mb.profile
+search=body*
+tlv=output\Game(2026-04-17).tlv
+matched_groups=2
+selected_variants=2
+selected_groups=2
+selection_lanes=1
+variants_total=3973
+groups_total=2904

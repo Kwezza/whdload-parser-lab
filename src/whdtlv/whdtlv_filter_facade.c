@@ -134,8 +134,8 @@ int whdtlv_filter_to_list(
     WhdTlvFilterSummary        *summary)
 {
     WhdTlvFilterOptions  default_opts;
-    TlvRuntime           rt;
-    WhdBoundProfile      profile;
+    TlvRuntime          *rt      = NULL; /* heap: ~8.6 KB, too large for Amiga stack */
+    WhdBoundProfile     *profile = NULL; /* heap: ~7.4 KB, too large for Amiga stack */
     WhdVariantArray      arr;
     WhdGroupSet          gs;
     WhdSelectResult      sel;
@@ -170,6 +170,17 @@ int whdtlv_filter_to_list(
         memset(summary, 0, sizeof(*summary));
     }
 
+    /* -- Heap-allocate large working structs (Amiga stack safety) ---- */
+    rt = (TlvRuntime *)malloc(sizeof(TlvRuntime));
+    if (!rt) {
+        return WHDTLV_FILTER_ERR_ALLOC;
+    }
+    profile = (WhdBoundProfile *)malloc(sizeof(WhdBoundProfile));
+    if (!profile) {
+        free(rt);
+        return WHDTLV_FILTER_ERR_ALLOC;
+    }
+
     /* -- Setup ------------------------------------------------------- */
     arr_built   = 0;
     gs_built    = 0;
@@ -183,14 +194,16 @@ int whdtlv_filter_to_list(
                                     : WHD_FILTER_CRC_WARNONLY;
 
     /* -- Load TLV runtime -------------------------------------------- */
-    tlv_runtime_init(&rt);
-    rc = tlv_runtime_load(&rt, tlv_path);
+    tlv_runtime_init(rt);
+    rc = tlv_runtime_load(rt, tlv_path);
     if (rc != WHD_FILTER_OK) {
+        free(profile);
+        free(rt);
         return whd_filter_err_to_public(rc);
     }
 
     /* -- CRC validation ---------------------------------------------- */
-    rc = tlv_crc_validate(&rt, defs_dir, crc_flags, &crc_result);
+    rc = tlv_crc_validate(rt, defs_dir, crc_flags, &crc_result);
     if (summary) {
         summary->crc_files_checked = (unsigned int)(
             crc_result.ok_count        +
@@ -200,42 +213,52 @@ int whdtlv_filter_to_list(
         summary->crc_mismatches = (unsigned int)crc_result.mismatch_count;
     }
     if (rc != WHD_FILTER_OK) {
-        tlv_runtime_free(&rt);
+        tlv_runtime_free(rt);
+        free(profile);
+        free(rt);
         return whd_filter_err_to_public(rc);
     }
 
     /* -- Profile load and bind --------------------------------------- */
-    memset(&profile, 0, sizeof(profile));
+    memset(profile, 0, sizeof(*profile));
     if (profile_path && profile_path[0] != '\0') {
-        rc = whd_profile_load(profile_path, &rt, defs_dir, &profile);
+        rc = whd_profile_load(profile_path, rt, defs_dir, profile);
         if (rc != WHD_FILTER_OK) {
-            tlv_runtime_free(&rt);
+            tlv_runtime_free(rt);
+            free(profile);
+            free(rt);
             return whd_filter_err_to_public(rc);
         }
         has_profile = 1;
     }
 
     /* -- Build variant views ----------------------------------------- */
-    display_fid = tlv_runtime_field_id(&rt, "display_name");
+    display_fid = tlv_runtime_field_id(rt, "display_name");
     if (display_fid == 0u) {
-        tlv_runtime_free(&rt);
+        tlv_runtime_free(rt);
+        free(profile);
+        free(rt);
         return WHDTLV_FILTER_ERR_EMPTY;
     }
 
     rc = tlv_variant_build(&arr,
-                            rt.reader.buffer + rt.data_offset,
-                            rt.reader.size   - rt.data_offset,
+                            rt->reader.buffer + rt->data_offset,
+                            rt->reader.size   - rt->data_offset,
                             display_fid,
-                            rt.group_id_field_id);
+                            rt->group_id_field_id);
     if (rc != WHD_FILTER_OK) {
-        tlv_runtime_free(&rt);
+        tlv_runtime_free(rt);
+        free(profile);
+        free(rt);
         return whd_filter_err_to_public(rc);
     }
     arr_built = 1;
 
     if (arr.count == 0u) {
         tlv_variant_free(&arr);
-        tlv_runtime_free(&rt);
+        tlv_runtime_free(rt);
+        free(profile);
+        free(rt);
         return WHDTLV_FILTER_ERR_EMPTY;
     }
 
@@ -244,10 +267,12 @@ int whdtlv_filter_to_list(
     }
 
     /* -- Group variants ---------------------------------------------- */
-    rc = tlv_group_build(&gs, &arr, (rt.group_id_field_id != 0u));
+    rc = tlv_group_build(&gs, &arr, (rt->group_id_field_id != 0u));
     if (rc != WHD_FILTER_OK) {
         tlv_variant_free(&arr);
-        tlv_runtime_free(&rt);
+        tlv_runtime_free(rt);
+        free(profile);
+        free(rt);
         return whd_filter_err_to_public(rc);
     }
     gs_built = 1;
@@ -261,11 +286,13 @@ int whdtlv_filter_to_list(
         WhdSearchRequest search_req;
         search_req.pattern = search_pattern;
         search_req.flags   = WHD_SEARCHF_ENABLED | WHD_SEARCHF_CASE_INSENSITIVE;
-        rc = whd_search_build_group_allow_list(&rt, &gs, &search_req, &allow);
+        rc = whd_search_build_group_allow_list(rt, &gs, &search_req, &allow);
         if (rc != WHD_FILTER_OK) {
             tlv_group_free(&gs);
             tlv_variant_free(&arr);
-            tlv_runtime_free(&rt);
+            tlv_runtime_free(rt);
+            free(profile);
+            free(rt);
             return whd_filter_err_to_public(rc);
         }
         has_search = 1;
@@ -283,13 +310,15 @@ int whdtlv_filter_to_list(
     /* -- Score and select -------------------------------------------- */
     rc = tlv_select_run(&sel, &gs,
                          &arr,
-                         has_profile ? &profile : NULL,
-                         has_search  ? &allow   : NULL);
+                         has_profile ? profile : NULL,
+                         has_search  ? &allow  : NULL);
     if (rc != WHD_FILTER_OK) {
         if (has_search) { whd_group_allow_list_free(&allow); }
         tlv_group_free(&gs);
         tlv_variant_free(&arr);
-        tlv_runtime_free(&rt);
+        tlv_runtime_free(rt);
+        free(profile);
+        free(rt);
         return whd_filter_err_to_public(rc);
     }
     sel_built = 1;
@@ -309,7 +338,9 @@ int whdtlv_filter_to_list(
         if (has_search) { whd_group_allow_list_free(&allow);  }
         if (gs_built)   { tlv_group_free(&gs);                }
         if (arr_built)  { tlv_variant_free(&arr);             }
-        tlv_runtime_free(&rt);
+        tlv_runtime_free(rt);
+        free(profile);
+        free(rt);
         return whd_filter_err_to_public(rc);
     }
 
@@ -318,7 +349,9 @@ int whdtlv_filter_to_list(
     if (has_search) { whd_group_allow_list_free(&allow);  }
     if (gs_built)   { tlv_group_free(&gs);                }
     if (arr_built)  { tlv_variant_free(&arr);             }
-    tlv_runtime_free(&rt);
+    tlv_runtime_free(rt);
+    free(profile);
+    free(rt);
 
     return WHDTLV_OK;
 }

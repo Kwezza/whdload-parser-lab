@@ -139,15 +139,9 @@ static void write_empty_cell(FILE *f, int last)
 /* TLV field value reader (matching the selector's format)               */
 /*========================================================================*/
 
-/* Field values are stored as 4-byte little-endian words.
- * The low 16 bits are the token ID. */
-static uint32_t read_u32_le_local(const uint8_t *p)
-{
-    return (uint32_t)p[0]
-         | ((uint32_t)p[1] << 8)
-         | ((uint32_t)p[2] << 16)
-         | ((uint32_t)p[3] << 24);
-}
+/* Field values are stored as 4-byte big-endian words.
+ * The low 16 bits are the token ID.
+ * Decoded with tlv_read_u32_be() from tlv_reader.h. */
 
 /*========================================================================*/
 /* Case-insensitive ASCII compare (for CRC map lookup)                   */
@@ -351,7 +345,7 @@ static int collect_explicit_tokens(const WhdVariantView *v,
         if (v->fields[fvi].field_id != bf->tlv_field_id) continue;
         if (v->fields[fvi].length < 4u) continue;
 
-        u32 = read_u32_le_local(v->fields[fvi].value);
+        u32 = tlv_read_u32_be(v->fields[fvi].value);
         tid = (uint16_t)(u32 & 0xFFFFu);
         tok = resolve_token(mgr, pfi, tid);
 

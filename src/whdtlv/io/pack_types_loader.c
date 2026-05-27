@@ -29,7 +29,7 @@
 #define MAX_ABBREV_LEN 16
 #define MAX_SEARCH_SNIPPET_LEN 128
 #define MAX_DAT_NAME_LEN 4   /* Amiga max filename 15 - hyphen(1) - date(10) = 4 chars max */
-#define MAX_FIELD_COUNT 16  /* Increased to accommodate filename field */
+#define MAX_FIELD_COUNT 32  /* Raised from 16; Games pack type has 21 fields */
 #define MAX_PACK_TYPES 32
 
 /*------------------------------------------------------------------------*/

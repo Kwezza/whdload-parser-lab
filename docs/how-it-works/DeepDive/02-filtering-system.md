@@ -41,26 +41,24 @@ data records begin (`data_offset`).
 
 The first block in a well-formed TLV **must** be type `0x01` (the field
 metadata map).  If any other byte appears first the load fails with
-`WHD_FILTER_ERR_TLV_HEADER`.  The TLV format uses a **mixed-endian** convention:
-structural framing fields (block payload sizes, record value lengths, CRC
-fingerprint values, and CSV-backed token IDs) are little-endian, while the
-Amiga-direct payloads `group_id` and the numeric subfields inside
-`archive_info` (`archive_size_kib`, `archive_crc32`) are big-endian (Motorola
-byte order, native to the 68000 CPU).  The reader helpers `u16_le()` and
-`u32_le()` in [tlv_runtime.c](../../../src/whdtlv/filtering/tlv_runtime.c)
-handle the framing fields; `group_id` is read with an explicit
-`(buf[pos] << 8) | buf[pos+1]` shift in
-[tlv_variant.c](../../../src/whdtlv/filtering/tlv_variant.c).
+`WHD_FILTER_ERR_TLV_HEADER`.  The TLV format is **uniformly big-endian** (Motorola byte order, native to the
+68000 CPU): all multi-byte fields — block payload sizes, record value lengths,
+CRC fingerprint values, CSV-backed token IDs, `group_id`, and the numeric
+subfields inside `archive_info` — are big-endian.  The reader helpers
+`tlv_read_u16_be()` and `tlv_read_u32_be()` in
+[tlv_reader.c](../../../src/whdtlv/filtering/tlv_reader.c) and
+[tlv_runtime.c](../../../src/whdtlv/filtering/tlv_runtime.c) decode every
+multi-byte field.
 
 **Endian quick-reference** (see [tlv-filtering-overview.md](../../tlv-filtering-overview.md) for the full field-by-field table):
 
 | Field / region | Byte order | Where read |
 |----------------|-----------|------------|
-| Block payload sizes | LE | `tlv_runtime.c` `u16_le()` |
-| Record value lengths | LE | `tlv_runtime.c` `u16_le()` |
-| CRC-32 fingerprints (block `0x04`) | LE | `tlv_runtime.c` `u32_le()` |
-| CSV-backed token IDs | LE `uint32` | `tlv_select.c` `read_u32_le()` |
-| `group_id` (field `0x05`) | **BE** `uint16` | `tlv_variant.c` shift read |
+| Block payload sizes | **BE** | `tlv_runtime.c` `tlv_read_u16_be()` |
+| Record value lengths | **BE** | `tlv_runtime.c` `tlv_read_u16_be()` |
+| CRC-32 fingerprints (block `0x04`) | **BE** | `tlv_runtime.c` `tlv_read_u32_be()` |
+| CSV-backed token IDs | **BE** `uint32` | `tlv_select.c` `tlv_read_u32_be()` |
+| `group_id` (field `0x05`) | **BE** `uint16` | `tlv_variant.c` `tlv_read_u16_be()` |
 | `archive_size_kib`, `archive_crc32` | **BE** `uint32` | `dat_to_tlv_main.c` write helper |
 
 Header block type bytes:
@@ -129,8 +127,8 @@ function populates a `WhdVariantView` for each variant:
 | `original_index` | 0-based scan order (runtime-only, never stored in TLV) |
 | `field_data[]` | Array of `(field_id, value_ptr, value_len)` triples for all other fields |
 
-CSV-backed field values are stored as 4-byte little-endian `uint32` IDs in
-the TLV.  The scoring stage reads them back with a `read_u32_le()` helper.
+CSV-backed field values are stored as 4-byte big-endian `uint32` IDs in
+the TLV.  The scoring stage reads them back with a `tlv_read_u32_be()` helper.
 
 ### `tlv_group.c` — grouping into game titles
 

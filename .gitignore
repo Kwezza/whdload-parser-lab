@@ -1,0 +1,5 @@
+# Build outputs
+build/
+
+# Assembled Amiga test bundle (derived artifact -- run assemble_bundle.bat to recreate)
+amiga_bundle/

@@ -539,6 +539,27 @@ const TLV_Entry *tlv_record_get_field_by_name(const TLV_Record *record,
 /*------------------------------------------------------------------------*/
 /* TLV File I/O */
 
+/* BE write helpers — all multi-byte TLV fields are written big-endian so
+ * the Amiga runtime can load them directly without any byte-swapping.
+ * Use these helpers for every uint16_t / uint32_t fwrite in this file.  */
+static void write_u16_be(FILE *f, uint16_t v)
+{
+    uint8_t buf[2];
+    buf[0] = (uint8_t)(v >> 8);
+    buf[1] = (uint8_t)(v & 0xFF);
+    fwrite(buf, 1, 2, f);
+}
+
+static void write_u32_be(FILE *f, uint32_t v)
+{
+    uint8_t buf[4];
+    buf[0] = (uint8_t)(v >> 24);
+    buf[1] = (uint8_t)(v >> 16);
+    buf[2] = (uint8_t)(v >>  8);
+    buf[3] = (uint8_t)(v & 0xFF);
+    fwrite(buf, 1, 4, f);
+}
+
 /**
  * @brief Write embedded metadata map to TLV file
  */
@@ -568,9 +589,8 @@ static bool tlv_write_metadata_map(FILE *file, const FieldRegistry *field_regist
     if (fwrite(&map_type, 1, 1, file) != 1) {
         return false;
     }
-    if (fwrite(&map_size, 2, 1, file) != 1) {
-        return false;
-    }
+    /* map_size: 2 bytes, big-endian */
+    write_u16_be(file, map_size);
 
     /* Second pass: write field mappings */
     for (uint16_t field_id = FIELD_ID_DYNAMIC_MIN; field_id <= FIELD_ID_DYNAMIC_MAX; field_id++) {
@@ -598,11 +618,11 @@ static bool tlv_write_metadata_map(FILE *file, const FieldRegistry *field_regist
  *
  * Wire format:
  *   [1 byte : type = 0x04]
- *   [2 bytes: payload size, little-endian]
- *   [2 bytes: entry count, little-endian]
+ *   [2 bytes: payload size, big-endian]
+ *   [2 bytes: entry count, big-endian]
  *   per entry:
  *     [N bytes: null-terminated csv_name]
- *     [4 bytes: crc32, little-endian]
+ *     [4 bytes: crc32, big-endian]
  */
 static bool tlv_write_csv_fingerprints(FILE *file, const GlobalCSVManager *manager)
 {
@@ -636,16 +656,12 @@ static bool tlv_write_csv_fingerprints(FILE *file, const GlobalCSVManager *manag
         return false;
     }
 
-    /* Write 2-byte payload size */
-    if (fwrite(&payload_size, 2, 1, file) != 1) {
-        return false;
-    }
+    /* Write 2-byte payload size (big-endian) */
+    write_u16_be(file, payload_size);
 
-    /* Write 2-byte entry count */
+    /* Write 2-byte entry count (big-endian) */
     count = (uint16_t)manager->cache_count;
-    if (fwrite(&count, 2, 1, file) != 1) {
-        return false;
-    }
+    write_u16_be(file, count);
 
     /* Write each entry: null-terminated name + 4-byte CRC */
     for (i = 0; i < manager->cache_count; i++) {
@@ -661,9 +677,8 @@ static bool tlv_write_csv_fingerprints(FILE *file, const GlobalCSVManager *manag
         if (fwrite(name, 1, nlen, file) != nlen) {
             return false;
         }
-        if (fwrite(&crc, 4, 1, file) != 1) {
-            return false;
-        }
+        /* crc32: 4 bytes, big-endian */
+        write_u32_be(file, crc);
     }
 
     return true;
@@ -672,6 +687,7 @@ static bool tlv_write_csv_fingerprints(FILE *file, const GlobalCSVManager *manag
 /**
  * @brief Read and deserialise a type 0x04 CSV fingerprint record.
  * The file position must be immediately after the type byte.
+ * All multi-byte fields are decoded as big-endian.
  */
 bool tlv_read_csv_fingerprints(FILE *file, CSVFingerprintMap *out_map)
 {
@@ -686,11 +702,17 @@ bool tlv_read_csv_fingerprints(FILE *file, CSVFingerprintMap *out_map)
     out_map->count   = 0;
     out_map->entries = NULL;
 
-    if (fread(&payload_size, 2, 1, file) != 1) {
-        return false;
-    }
-    if (fread(&count, 2, 1, file) != 1) {
-        return false;
+    {
+        uint8_t buf[2];
+        if (fread(buf, 1, 2, file) != 2) {
+            return false;
+        }
+        payload_size = (uint16_t)((buf[0] << 8) | buf[1]); /* big-endian; read to advance past field */
+        (void)payload_size;
+        if (fread(buf, 1, 2, file) != 2) {
+            return false;
+        }
+        count = (uint16_t)((buf[0] << 8) | buf[1]); /* big-endian */
     }
 
     if (count == 0) {
@@ -712,11 +734,18 @@ bool tlv_read_csv_fingerprints(FILE *file, CSVFingerprintMap *out_map)
         }
         out_map->entries[i].csv_name[pos] = '\0';
 
-        /* Read 4-byte CRC */
-        if (fread(&out_map->entries[i].crc32, 4, 1, file) != 1) {
-            whd_free(out_map->entries);
-            out_map->entries = NULL;
-            return false;
+        /* Read 4-byte CRC (big-endian) */
+        {
+            uint8_t buf[4];
+            if (fread(buf, 1, 4, file) != 4) {
+                whd_free(out_map->entries);
+                out_map->entries = NULL;
+                return false;
+            }
+            out_map->entries[i].crc32 = ((uint32_t)buf[0] << 24) |
+                                        ((uint32_t)buf[1] << 16) |
+                                        ((uint32_t)buf[2] <<  8) |
+                                         (uint32_t)buf[3];
         }
     }
 
@@ -773,10 +802,8 @@ bool tlv_write_record_with_metadata(FILE *file,
             return false;
         }
 
-        /* Write length */
-        if (fwrite(&entry->length, 2, 1, file) != 1) {
-            return false;
-        }
+        /* Write length (value_length: 2 bytes, big-endian) */
+        write_u16_be(file, entry->length);
 
         /* Write value */
         if (entry->length > 0) {
@@ -827,8 +854,12 @@ static bool tlv_read_metadata_map(FILE *file, FieldRegistry *field_registry) {
     if (fread(&map_type, 1, 1, file) != 1 || map_type != TLV_TYPE_METADATA_MAP) {
         return false;
     }
-    if (fread(&map_size, 2, 1, file) != 1) {
-        return false;
+    {
+        uint8_t buf[2];
+        if (fread(buf, 1, 2, file) != 2) {
+            return false;
+        }
+        map_size = (uint16_t)((buf[0] << 8) | buf[1]); /* big-endian */
     }
 
     /* Read field mappings */
@@ -896,9 +927,13 @@ bool tlv_read_record_with_metadata(FILE *file,
             /* Skip metadata map */
             uint16_t map_size;
             fseek(file, 1, SEEK_CUR); /* Skip type byte */
-            if (fread(&map_size, 2, 1, file) != 1) {
-                tlv_record_free(record);
-                return false;
+            {
+                uint8_t buf[2];
+                if (fread(buf, 1, 2, file) != 2) {
+                    tlv_record_free(record);
+                    return false;
+                }
+                map_size = (uint16_t)((buf[0] << 8) | buf[1]); /* big-endian */
             }
             fseek(file, map_size, SEEK_CUR);
         }
@@ -916,10 +951,14 @@ bool tlv_read_record_with_metadata(FILE *file,
             return false;
         }
 
-        /* Read length */
-        if (fread(&length, 2, 1, file) != 1) {
-            tlv_record_free(record);
-            return false;
+        /* Read length (big-endian) */
+        {
+            uint8_t buf[2];
+            if (fread(buf, 1, 2, file) != 2) {
+                tlv_record_free(record);
+                return false;
+            }
+            length = (uint16_t)((buf[0] << 8) | buf[1]);
         }
 
         /* Read value */
@@ -1276,15 +1315,13 @@ static bool tlv_write_group_map(FILE *file)
     block_type  = TLV_TYPE_GROUP_MAP;
     group_count = (uint16_t)session_group_map.count;
 
-    if (fwrite(&block_type,   1u, 1u, file) != 1u) {
+    if (fwrite(&block_type, 1u, 1u, file) != 1u) {
         return false;
     }
-    if (fwrite(&payload_size, 2u, 1u, file) != 1u) {
-        return false;
-    }
-    if (fwrite(&group_count,  2u, 1u, file) != 1u) {
-        return false;
-    }
+    /* payload_size: 2 bytes, big-endian */
+    write_u16_be(file, payload_size);
+    /* group_count: 2 bytes, big-endian */
+    write_u16_be(file, group_count);
 
     for (i = 0u; i < session_group_map.count; i++) {
         uint8_t  id_be[2];

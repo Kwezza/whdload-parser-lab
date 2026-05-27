@@ -1,5 +1,10 @@
 # TLV Endianness Divergence Analysis
 
+> **SUPERSEDED — 2026-05-27.**  All items (1–12) are complete.  The TLV format
+> is now uniformly big-endian.  This file is retained as a historical record of
+> the divergence and the remediation plan.  For the current byte-order
+> specification see [tlv-filtering-overview.md](tlv-filtering-overview.md).
+
 **Date:** 2026-05-26  
 **Scope:** `src/whdtlv/core/tlv_builder.c`, `src/whdtlv/filtering/`, `tools_src/dat_to_tlv_main.c`
 
@@ -79,7 +84,7 @@ updates are called out explicitly at the points where they apply.
 
 ---
 
-### Item 1 — Source-tree audit
+### Item 1 — Source-tree audit  ✓ COMPLETE
 
 Before making any changes, grep the full source tree for every site that reads or writes
 a multi-byte TLV value without an explicit byte-order operation.  The audit output becomes
@@ -100,9 +105,23 @@ items 3–10 below must be resolved before the plan is considered complete.
 
 **Gate: audit checklist produced; `make` clean (no code changes yet).**
 
+> **COMPLETE — 2026-05-27.**  All five patterns were run against `src/` and `tools_src/`.
+> 30 sites recorded in [endianness-audit.md](endianness-audit.md) with resolving-item
+> assignments.  Three `fread` sites in `tlv_read_metadata_map` and
+> `tlv_read_record_with_metadata` (L830, L899, L920) are folded into Item 4 scope.
+> Two formerly unassigned gaps (`language_bitfield` uint16 L1172 and `sps_id` uint32 L1209
+> in `filename_processor.c`) were inspected and confirmed as live TLV multi-byte value
+> payload writes; both are folded into Item 9 as sub-group B (non-CSV numeric payloads).
+> No current functional read path was found for either field (see Item 9 and the audit
+> file for details).  Build gate: `make build/host/dat_to_tlv.exe` — clean, zero warnings.
 ---
 
-### Item 2 — Add write helpers to `tlv_builder.c`
+### Item 2 — Add write helpers to `tlv_builder.c` ✓ COMPLETE
+
+**Completed:** 2026-05-27.  `write_u16_be` and `write_u32_be` added as static helpers in
+the `TLV File I/O` section of [tlv_builder.c](../src/whdtlv/core/tlv_builder.c), immediately
+before `tlv_write_metadata_map`.  Style matches `encode_u32_be` in `dat_to_tlv_main.c`.
+Build gate passed (zero errors; unused-function warnings expected until Item 3 consumes both helpers).
 
 Add two static helpers following the same style as `encode_u32_be` already in
 [dat_to_tlv_main.c](../tools_src/dat_to_tlv_main.c).  No behaviour changes at this
@@ -128,11 +147,11 @@ static void write_u32_be(FILE *f, uint32_t v)
 }
 ```
 
-**Gate: `make` clean; comments in `tlv_builder.c` updated to note BE write helpers available.**
+**Gate: `make` clean; comments in `tlv_builder.c` updated to note BE write helpers available. — PASSED 2026-05-27**
 
 ---
 
-### Item 3 — Replace raw `fwrite` calls for block framing fields in `tlv_builder.c`
+### Item 3 — Replace raw `fwrite` calls for block framing fields in `tlv_builder.c` ✓ COMPLETE
 
 Every `fwrite` that passes a `uint16_t *` or `uint32_t *` for a block header or
 `value_length` field (other than the `group_id` `id_be` write, which is already
@@ -151,9 +170,15 @@ token ID write path yet — that comes in item 7.
 
 **Gate: `make` clean; inline format comments in changed functions updated to read "big-endian" at every affected field.**
 
+> **COMPLETE — 2026-05-27.**  All seven `fwrite` sites replaced with `write_u16_be` /
+> `write_u32_be` calls.  Inline wire-format comments in `tlv_write_csv_fingerprints`,
+> `tlv_write_metadata_map`, `tlv_write_group_map`, and `tlv_write_record_with_metadata`
+> updated to read "big-endian".  Build gate: `make build/host/dat_to_tlv.exe` — clean,
+> zero warnings.
+
 ---
 
-### Item 4 — Fix `tlv_read_csv_fingerprints()` in `tlv_builder.c`
+### Item 4 — Fix `tlv_read_csv_fingerprints()` in `tlv_builder.c` ✓ COMPLETE
 
 The fingerprint writer was updated in item 3.  The builder's own internal re-read path
 `tlv_read_csv_fingerprints()` must be fixed immediately — not deferred — so the builder
@@ -170,9 +195,18 @@ Replace with explicit BE reads:
 **Gate: `make` clean; the stale LE assumption comment at the top of
 `tlv_read_csv_fingerprints()` removed or updated.**
 
+> **COMPLETE — 2026-05-27.**  All six `fread` sites (rows 8–13 in the audit) replaced
+> with explicit big-endian reads using `uint8_t buf[]` decode patterns.  Scope extended
+> to include the three folded-in sites from the audit: `tlv_read_metadata_map` (row 11,
+> `map_size`) and `tlv_read_record_with_metadata` (row 12 skip-path `map_size`, row 13
+> `value_length`).  The `tlv_read_csv_fingerprints` docstring updated to note
+> big-endian decoding.  `payload_size` is decoded but not used downstream (field is
+> advanced past only); suppressed with `(void)payload_size`.  Build gate:
+> `make build/host/dat_to_tlv.exe` — clean, zero warnings.
+
 ---
 
-### Item 5 — Rebuild TLV files
+### Item 5 — Rebuild TLV files ✓ COMPLETE
 
 Run `make run` for each pack type to produce fresh TLV files with BE block framing.
 Token ID field values are still LE at this point — this is intentional and consistent:
@@ -180,9 +214,19 @@ the reader has not been updated yet.
 
 **Gate: `make` clean, output TLVs produced.**
 
+> **COMPLETE — 2026-05-27.**  Two pre-existing issues were resolved before the run could
+> succeed: (1) a stray space in `assets_raw/prefs/pack_types.ini` line 6
+> (`modifier, archive_form` → `modifier,archive_form`) that caused field-list parsing to
+> fail; (2) `MAX_FIELD_COUNT` in `src/whdtlv/io/pack_types_loader.c` raised from 16 to
+> 32 — the Games pack type has 21 fields, which exceeded the old limit.  After those
+> fixes, `make run` completed cleanly: all five pack types processed with 0 errors
+> (DemB 12 entries, Demo 904, GamB 128, Game 3973, Mags 104).  All five `.tlv` files in
+> `output/` regenerated.  Build gate: `make build/host/dat_to_tlv.exe` — clean, zero
+> warnings.
+
 ---
 
-### Item 6 — Update `tlv_runtime.c` block framing reads
+### Item 6 — Update `tlv_runtime.c` block framing reads ✓ COMPLETE
 
 Replace the `u16_le()` calls used to parse block header sizes/counts and the
 `u32_le()` call used to read the CRC-32 fingerprint values with BE equivalents.
@@ -200,9 +244,16 @@ this purpose.
 **Gate: `make` clean; `u16_le` and `u32_le` static helpers in `tlv_runtime.c` removed
 (they are now unused); inline comments updated to state "big-endian".**
 
+> **COMPLETE — 2026-05-27.**  All six `u16_le` / `u32_le` call sites (audit rows 14–19)
+> replaced with `tlv_read_u16_be` / `tlv_read_u32_be`.  The local `u16_le`, `u32_le`,
+> and `u16_be` static helpers removed from `tlv_runtime.c` (the last was used only for
+> `group_id` in `parse_group_map` and is now handled by `tlv_read_u16_be`).  File-header
+> comment and all four wire-format block comments updated to read "big-endian".
+> Build gate: `make build/host/dat_to_tlv.exe` — clean, zero warnings.
+
 ---
 
-### Item 7 — Update `tlv_variant.c` value_length read
+### Item 7 — Update `tlv_variant.c` value_length read ✓ COMPLETE
 
 Replace the `u16_le()` call that reads each data record's `value_length` with a BE
 equivalent.  This is a single call site:
@@ -216,6 +267,13 @@ length = tlv_read_u16_be(buffer + pos + 1u);
 
 **Gate: `make` clean; `u16_le` static helper in `tlv_variant.c` removed (now unused);
 wire format comment at top of file updated to read "big-endian".**
+
+> **COMPLETE — 2026-05-27.**  Single call site (audit row 20, L120) replaced with
+> `tlv_read_u16_be(buffer + pos + 1u)`.  `#include "whdtlv/filtering/tlv_reader.h"`
+> added to `tlv_variant.c` (not previously included).  The `u16_le` static helper
+> (L57) removed.  Wire-format block comment at the top of the file updated: "little-endian"
+> → "big-endian" for `value_length`; CSV field values comment updated to "BE uint32".
+> Build gate: `make build/host/dat_to_tlv.exe` — clean, zero warnings.
 
 ---
 
@@ -233,11 +291,21 @@ make test-filter
 
 ---
 
-### Item 9 — Fix the CSV token ID write path in `filename_processor.c`
+### Item 9 — Fix all multi-byte value payload writes in `filename_processor.c` ✓ COMPLETE
 
-CSV-backed token IDs are currently packed into the value buffer as a native-endian
-`uint32_t` cast.  Replace each site where a 4-byte token ID is assembled with an
-explicit BE encode:
+All multi-byte value fields written via `tlv_record_add_entry` in `filename_processor.c`
+are currently passed as native-endian memory pointers.  On x86 this produces
+little-endian on-disk values.  Replace every affected site with explicit big-endian
+encoding before the call.
+
+The software has not been released, so there is no compatibility obligation with any
+previously generated TLV file.  Existing `.tlv` files in `output/` are build artefacts
+and will be regenerated.
+
+#### Sub-group A — CSV-backed uint32 token IDs
+
+These four sites pack a token ID returned from a CSV lookup into the value buffer as a
+native-endian `uint32_t` cast.  Replace each with an explicit BE encode:
 
 ```c
 /* Old — host-native (LE on x86) */
@@ -254,14 +322,72 @@ id_be[3] = (uint8_t)(id & 0xFF);
 tlv_record_add_entry(record, field_id, id_be, 4);
 ```
 
-Check all sites in `filename_processor.c` where a 4-byte ID is passed to
-`tlv_record_add_entry`.
+Sites (confirmed by audit 2026-05-27):
 
-**Gate: `make` clean; comments at changed sites updated to state "stored as big-endian uint32".**
+| Line | Context | Field | Width |
+|------|---------|-------|-------|
+| 624  | contributor lookup     | `contributor_id` (CSV token) | uint32 |
+| 827  | prescan CSV field loop | `id`             (CSV token) | uint32 |
+| 1302 | CSV multi-part token   | `token_id`       (CSV token) | uint32 |
+| 1335 | CSV single token       | `token_id`       (CSV token) | uint32 |
+
+#### Sub-group B — Non-CSV numeric payloads
+
+Two additional sites (formerly G1/G2 unassigned gaps) write non-CSV multi-byte values
+as native-endian pointer casts.  Code inspection on 2026-05-27 confirmed both are live
+TLV value payload writes; neither is a CSV token ID.
+
+| Line | Context | Field | Width | Encoding required |
+|------|---------|-------|-------|-------------------|
+| 1172 | language token loop | `language_bitfield` (language flags) | uint16 | explicit 2-byte BE |
+| 1209 | SPS loop            | `sps_id` (raw `atoi` value)          | uint32 | explicit 4-byte BE |
+
+For `language_bitfield` (uint16 BE):
+
+```c
+/* Old */
+tlv_record_add_entry(record, language_field_id,
+                     (const uint8_t*)&language_bitfield, sizeof(language_bitfield));
+
+/* New */
+uint8_t lang_be[2];
+lang_be[0] = (uint8_t)(language_bitfield >> 8);
+lang_be[1] = (uint8_t)(language_bitfield & 0xFF);
+tlv_record_add_entry(record, language_field_id, lang_be, 2);
+```
+
+For `sps_id` (uint32 BE): apply the same 4-byte BE pattern shown in sub-group A.
+
+#### Read-path status for sub-group B fields (recorded 2026-05-27)
+
+- `language_bitfield`: `variant_index_build` tracks the "language" field but only
+  extracts a `csv_id` for entries with `length == 4`; the 2-byte bitfield always
+  produces `csv_id = 0` and falls back to a hash comparison that does not match profile
+  token IDs.  `tlv_select.c` and `whdtlv_report_profile.c` both skip entries with
+  `length < 4`.  **No current functional read path found.**  This must be re-confirmed
+  during implementation; if a read path is added before this item is implemented, the
+  new read site must also use explicit BE decoding.
+
+- `sps_id`: the "sps" field is not in `variant_index_build`'s tracked list and no
+  profile currently binds it as a scored or reported column.  **No current read path
+  found.**  Same re-confirmation requirement applies.
+
+**Gate: `make` clean; comments at all changed sites updated to state "stored as big-endian"; sub-group B sites annotated with the field's bit-width and that no read path currently exists.**
+
+> **COMPLETE — 2026-05-27.**  All six audit rows (25–30) resolved.  Sub-group A: four
+> CSV-backed `uint32_t` token ID sites (`contributor_id` L624, prescan `id` L827, ampersand
+> multi-part `token_id` L1302, single-token `token_id` L1335) each replaced with a local
+> `uint8_t [4]` BE buffer pattern before the `tlv_record_add_entry` call; inline comments
+> read "stored as big-endian uint32".  Sub-group B: `language_bitfield` (L1172, uint16)
+> encoded into a local `lang_be[2]`; `sps_id` (L1209, uint32) encoded into a local
+> `sps_be[4]`; both annotated "no current read path; stored as big-endian".  Read-path
+> re-confirmation: no new read sites for either sub-group B field found in
+> `tlv_variant.c`, `tlv_select.c`, or `whdtlv_report_profile.c` — annotation holds.
+> Build gate: `make build/host/dat_to_tlv.exe` — clean, zero warnings.
 
 ---
 
-### Item 10 — Update token ID read sites in the filtering and reporting layers
+### Item 10 — Update token ID read sites in the filtering and reporting layers ✓ COMPLETE
 
 Replace all LE token ID decode helpers with BE equivalents.  These are independent
 of the block framing reads updated in items 6 and 7.
@@ -269,23 +395,41 @@ of the block framing reads updated in items 6 and 7.
 | File | Helper to replace | Replacement |
 |---|---|---|
 | [tlv_select.c](../src/whdtlv/filtering/tlv_select.c) | `read_u32_le(p)` (3 call sites) | `tlv_read_u32_be(p)` |
-| [whdtlv_report_profile.c](../src/whdtlv/reporting/whdtlv_report_profile.c) | `read_u32_le_local(p)` | BE equivalent |
+| [whdtlv_report_profile.c](../src/whdtlv/reporting/whdtlv_report_profile.c) | `read_u32_le_local(p)` | `tlv_read_u32_be(p)` |
 
 **Gate: `make` clean; `read_u32_le` / `read_u32_le_local` static helpers removed (now
 unused); stale LE encoding note at the top of `tlv_select.c` removed.**
 
+> **COMPLETE — 2026-05-27.**  All four audit rows (21–24) resolved.  In
+> `tlv_select.c`: `#include "whdtlv/filtering/tlv_reader.h"` added; the `read_u32_le`
+> static helper (L51) removed; all three call sites (L146 `variant_field_in_bucket`,
+> L285 inner scorer loop, L448 `tlv_select_score_variant`) replaced with
+> `tlv_read_u32_be`; the file-level wire-format comment updated from "4-byte LE uint32"
+> to "4-byte BE uint32".  In `whdtlv_report_profile.c`: `tlv_reader.h` was already
+> included; the `read_u32_le_local` static helper (L144) removed and its block comment
+> updated to note big-endian decoding via `tlv_read_u32_be`; the single call site
+> (L354 `collect_explicit_tokens`) replaced with `tlv_read_u32_be`.
+> Build gate: `make build/host/dat_to_tlv.exe` — clean, zero warnings.
+
 ---
 
-### Item 11 — Rebuild TLV files
+### Item 11 — Rebuild TLV files ✓ COMPLETE
 
 Run `make run` again to produce TLV files with both BE block framing and BE token IDs.
 The files produced in item 5 are now stale and must be replaced before tests are run.
 
 **Gate: `make` clean, output TLVs produced.**
 
+> **COMPLETE — 2026-05-27.**  `make run` completed cleanly after a rebuild of
+> `tlv_select.o` (the only object that changed since item 5).  All five pack types
+> processed with 0 errors: DemB 12 entries, Demo 904, GamB 128, Game 3973, Mags 104.
+> All five `.tlv` files in `output/` regenerated with uniform big-endian encoding
+> (both block framing and token ID field values).  Build gate:
+> `make build/host/dat_to_tlv.exe` — clean, zero warnings.
+
 ---
 
-### Item 12 — Run all tests and update documentation *(final gate)*
+### Item 12 — Run all tests and update documentation *(final gate)* ✓ COMPLETE
 
 ```
 make test-filter
@@ -307,6 +451,24 @@ Once tests pass, update the project documentation to reflect the now-uniform byt
   or archive it once the format is uniform.
 
 **Gate: `make` clean + all tests pass + documentation updated.**
+
+> **COMPLETE — 2026-05-27.**  Both test suites passed after the fixture TLVs in
+> `assets_raw/TLV/` were replaced with the freshly built BE-encoded versions from
+> `output/` (DemB, GamB, Game, Mags).  Filter suite: 38 passed, 0 failed.
+> Report suite: 56 passed, 0 failed (all 13 previously failing assertions fixed by
+> the fresh BE fixtures).  Documentation updated:
+> (1) `tlv_reader.c` stale LE comment (lines 6–12) rewritten to state uniform
+> big-endian encoding and name the BE read helpers;
+> (2) `tlv-filtering-overview.md` endian reference table converted to all-BE, LE
+> rationale paragraph removed, "Mixed-endian convention is intentional and stable"
+> note replaced with an all-BE note, and the inline token-ID reference at line 281
+> updated from LE to BE;
+> (3) `02-filtering-system.md` mixed-endian paragraph replaced with a uniform-BE
+> paragraph, endian quick-reference table updated to all-BE with correct helper
+> names, and the inline `read_u32_le()` reference updated to `tlv_read_u32_be()`;
+> (4) this file marked superseded with a banner at the top pointing to
+> `tlv-filtering-overview.md` as the authoritative byte-order reference.
+> Build gate: `make build/host/dat_to_tlv.exe` — clean, zero warnings.
 
 ---
 

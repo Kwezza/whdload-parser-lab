@@ -19,7 +19,7 @@
  * field_id.  Any single excluded value rejects the variant.  The best
  * (highest) field score among all values for a field is taken.
  *
- * Field values in TLV: 4-byte LE uint32 for CSV-backed fields.
+ * Field values in TLV: 4-byte BE uint32 for CSV-backed fields.
  * rank_by_id[] is indexed by (id & 0xFF) - an intentional 8-bit hash that
  * matches the profile binder's storage convention.
  *
@@ -28,6 +28,7 @@
 
 #include "whdtlv/filtering/tlv_select.h"
 #include "whdtlv/filtering/tlv_filter.h"
+#include "whdtlv/filtering/tlv_reader.h"
 #include "whdtlv/filtering/selection_plan.h"
 #include "whdtlv/filtering/whd_search.h"
 #include <stdlib.h>
@@ -44,17 +45,6 @@
 /*========================================================================*/
 /* Internal helpers                                                       */
 /*========================================================================*/
-
-/*------------------------------------------------------------------------*/
-/* Read a 4-byte LE uint32 from a raw byte pointer.                      */
-
-static uint32_t read_u32_le(const uint8_t *p)
-{
-    return (uint32_t)p[0]
-         | ((uint32_t)p[1] << 8)
-         | ((uint32_t)p[2] << 16)
-         | ((uint32_t)p[3] << 24);
-}
 
 /*------------------------------------------------------------------------*/
 /* Score a single (field, token-id) pair.
@@ -143,7 +133,7 @@ static int variant_field_in_bucket(const WhdVariantView *v,
         }
 
         found_value = 1;
-        u32 = read_u32_le(v->fields[fvi].value);
+        u32 = tlv_read_u32_be(v->fields[fvi].value);
         tid = (uint16_t)(u32 & 0xFFFFu);
 
         if (token_in_bucket(bf, bucket_index, tid)) {
@@ -282,7 +272,7 @@ static void score_variant_for_lane(WhdVariantScore        *out,
             }
 
             found_value = 1;
-            u32 = read_u32_le(v->fields[fvi].value);
+            u32 = tlv_read_u32_be(v->fields[fvi].value);
             tid = (uint16_t)(u32 & 0xFFFFu);
 
             /* Exclude check */
@@ -455,7 +445,7 @@ void tlv_select_score_variant(WhdVariantScore       *out,
             }
 
             found_value = 1;
-            u32 = read_u32_le(v->fields[fvi].value);
+            u32 = tlv_read_u32_be(v->fields[fvi].value);
             tid = (uint16_t)(u32 & 0xFFFFu);
 
             if (check_and_score(bf, tid, &best_field_score)) {

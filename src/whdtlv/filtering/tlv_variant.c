@@ -5,10 +5,10 @@
  *
  * Stage F: real TLV record scanner.
  *
- * TLV data record wire format (little-endian):
+ * TLV data record wire format (big-endian):
  *   per entry:
  *     [1]  field_id
- *     [2]  LE uint16 value length
+ *     [2]  BE uint16 value length
  *     [N]  value bytes
  *
  * Variants are delimited by the display_field_id boundary marker.  Every
@@ -17,7 +17,7 @@
  * the buffer).  We store a pointer into the buffer and provide a safe
  * NUL-terminated copy for base_name.
  *
- * Field values for CSV-backed fields are 4-byte LE uint32 IDs.  The view
+ * Field values for CSV-backed fields are 4-byte BE uint32 IDs.  The view
  * stores the raw bytes and lets the scorer decode them.
  *
  * base_name derivation:
@@ -43,6 +43,7 @@
 
 #include "whdtlv/filtering/tlv_variant.h"
 #include "whdtlv/filtering/tlv_filter.h"
+#include "whdtlv/filtering/tlv_reader.h"
 #include "whdtlv/core/group_util.h"
 #include <stdlib.h>
 #include <string.h>
@@ -50,14 +51,6 @@
 /*========================================================================*/
 /* Internal helpers                                                       */
 /*========================================================================*/
-
-/*------------------------------------------------------------------------*/
-/* LE helpers                                                             */
-
-static uint16_t u16_le(const uint8_t *p)
-{
-    return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
-}
 
 /*------------------------------------------------------------------------*/
 /* Grow the variant array by doubling capacity.
@@ -117,7 +110,7 @@ int tlv_variant_build(WhdVariantArray *arr,
         unsigned long  value_start;
 
         field_id    = buffer[pos];
-        length      = u16_le(buffer + pos + 1u);
+        length      = tlv_read_u16_be(buffer + pos + 1u);
         value_start = pos + 3u;
 
         /* Safety: skip entry if it would run past the end of the buffer */
