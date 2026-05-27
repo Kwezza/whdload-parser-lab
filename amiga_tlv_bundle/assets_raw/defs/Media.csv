@@ -1,0 +1,5 @@
+#ID, Filename tag, description, is default?
+1,Disk,Floppy disk
+2,CD,CD-ROM
+3,HD,Hard disk install
+4,CDTV,CDTV media

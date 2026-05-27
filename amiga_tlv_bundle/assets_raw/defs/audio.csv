@@ -1,0 +1,7 @@
+#ID, Filename tag, description, is default?
+1,Standard,Standard audio,default
+2,MT32,MT-32 or MIDI audio
+3,Audios,Audio-added variant
+4,NoVoice,Voice removed
+5,NoSpeech,Speech removed
+6,NoMusic,Music removed

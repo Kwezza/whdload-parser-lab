@@ -779,8 +779,8 @@ What is **not** closed by this document:
 | Item | Status |
 |---|---|
 | Physical Amiga hardware confirmation | Optional Phase 5 — not yet run |
-| `whdtlv_report.exe` garbled CSV output against BE TLV | Follow-up required — cause unknown |
-| Report layer endianness audit | Separate work item; not covered by the filter facade tests |
+| `whdtlv_report.exe` garbled CSV output against BE TLV | **Fixed 2026-05-27** — private `decode_le32` in `whdtlv_report_csv.c` replaced with `tlv_read_u32_be`; 56/56 report tests pass |
+| Report layer endianness audit | **Complete** — no remaining LE decode sites in the reporting layer |
 
 ### Phase 5 — Physical Amiga hardware confirmation (optional)
 
@@ -792,17 +792,39 @@ and real AmigaDOS stack behaviour.
 If physical hardware confirmation is desired, repeat the Phase 4 procedure with the
 same `amiga_bundle/` on real hardware.  Expected result: identical 34/0 output.
 
-### Follow-up: `whdtlv_report.exe` garbled CSV against BE TLV
+### Follow-up: `whdtlv_report.exe` garbled CSV against BE TLV ✓ FIXED (2026-05-27)
 
 During Phase 2, `whdtlv_report.exe` produced garbled CSV output when run against the
 new big-endian TLV files.  This was noted but not investigated further because the
-filter facade tests do not depend on the report tool.  Before declaring all host tooling
-finished, this should be investigated:
+filter facade tests do not depend on the report tool.
 
-1. Confirm whether `build\host\whdtlv_report.exe` was rebuilt after the endianness
-   remediation (`make report` or equivalent), or whether a stale pre-remediation binary
-   was still present.
-2. If the binary is current, identify which report-layer read path is not yet using
-   `tlv_read_u32_be()` / `tlv_read_u16_be()`.
-3. Fix, rebuild, and verify that the report CSV output for
-   `output\Game(2026-04-17).tlv` is no longer garbled.
+**Root cause:** Not a stale build.  `whdtlv_report_csv.c` had its own private
+`decode_le32` helper that was missed by the Item 1 endianness audit — its name did not
+match any of the five search patterns used (`fwrite(&`, `fread(&`, `u16_le`, `u32_le`,
+`read_u32_le`).  The file also had two inline 2-byte LE decode expressions
+(`value[0] | (value[1] << 8)`) for the language bitmask and the non-printable string
+integer fallback.  None of these were updated during Items 1–12.
+
+The private helper was itself redundant: `whdtlv_report_csv.c` already includes
+`whdtlv/filtering/tlv_reader.h`, which declares `tlv_read_u32_be()`.  Whoever wrote
+the file did not notice the canonical function was already available.
+
+**Fix applied (2026-05-27):**
+
+- `decode_le32` private helper removed entirely.
+- All six `decode_le32` / inline LE call sites replaced:
+
+  | Site | Old | New |
+  |---|---|---|
+  | 4-byte token, no-CSV raw render | `decode_le32` | `tlv_read_u32_be` |
+  | 2-byte language bitmask (inline) | `value[0] \| (value[1] << 8)` | `(value[0] << 8) \| value[1]` |
+  | **4-byte CSV token ID lookup** | `decode_le32` | `tlv_read_u32_be` — primary garbling cause |
+  | 2-byte STRING non-printable (inline) | `value[0] \| (value[1] << 8)` | `(value[0] << 8) \| value[1]` |
+  | 4-byte STRING non-printable fallback | `decode_le32` | `tlv_read_u32_be` |
+  | `REPT_FIELD_UNKNOWN` 4-byte fallback | `decode_le32` | `tlv_read_u32_be` |
+  | Long-mode `--include-ids` raw ID | `decode_le32` | `tlv_read_u32_be` |
+  | Stale comment | "4-byte LE uint32" | "4-byte BE uint32" |
+
+- Rebuilt with `make report` — zero warnings.
+- `make test-report` — **56 passed, 0 failed** (Test 15 confirmed `unresolved=0`,
+  previously all CSV-backed token lookups returned `ST_NOT_IN_CSV` against wrong IDs).

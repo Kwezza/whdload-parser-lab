@@ -58,7 +58,7 @@ typedef enum {
     REPT_FIELD_DISPLAY,       /* display_name: variant boundary — stored in variant.filename */
     REPT_FIELD_GROUP_ID,      /* group_id: extracted to variant.group_id, not in fields[] */
     REPT_FIELD_ARCHIVE_INFO,  /* archive_info: 8-byte BE payload in variant.fields[] */
-    REPT_FIELD_TOKEN,         /* CSV-backed 4-byte LE uint32 in variant.fields[] */
+    REPT_FIELD_TOKEN,         /* CSV-backed 4-byte BE uint32 in variant.fields[] */
     REPT_FIELD_STRING,        /* free-form bytes in variant.fields[] */
     REPT_FIELD_UNKNOWN        /* cannot classify (no CSV and not a known special field) */
 } ReptFieldKind;
@@ -117,14 +117,7 @@ static int rept_strcasecmp(const char *a, const char *b)
     }
 }
 
-/* Decode a 4-byte little-endian uint32 */
-static uint32_t decode_le32(const uint8_t *v)
-{
-    return (uint32_t)v[0]
-         | ((uint32_t)v[1] <<  8)
-         | ((uint32_t)v[2] << 16)
-         | ((uint32_t)v[3] << 24);
-}
+/* 4-byte BE decode: use tlv_read_u32_be() from tlv_reader.h — no private helper needed */
 
 /* Write one CSV cell, quoting the value when it contains , " CR LF or ;
  * An empty or NULL value writes nothing (empty unquoted cell). */
@@ -429,7 +422,7 @@ static const char *resolve_value(
                 snprintf(val_buf, REPT_VAL_BUF_SIZE, "0x%04X",
                          (unsigned)((uint32_t)fv->value[0] | ((uint32_t)fv->value[1] << 8)));
             } else {
-                snprintf(val_buf, REPT_VAL_BUF_SIZE, "%lu", (unsigned long)decode_le32(fv->value));
+                snprintf(val_buf, REPT_VAL_BUF_SIZE, "%lu", (unsigned long)tlv_read_u32_be(fv->value));
             }
             if (sum) { sum->values_unresolved++; }
             return ST_MISSING_CSV;
@@ -437,7 +430,7 @@ static const char *resolve_value(
 
         /* ---- 2-byte bitmask (e.g. language) ---- */
         if (fv->length == 2u) {
-            uint16_t bits = (uint16_t)fv->value[0] | ((uint16_t)fv->value[1] << 8);
+            uint16_t bits = ((uint16_t)fv->value[0] << 8) | (uint16_t)fv->value[1];
             size_t   tok_len = 0, desc_len = 0;
             int      bit, resolved_any = 0, first = 1;
             /* static buffers: bitmask fields only appear in resolve_value which is
@@ -482,7 +475,7 @@ static const char *resolve_value(
         }
 
         /* ---- 4-byte single token ID ---- */
-        id = decode_le32(fv->value);
+        id = tlv_read_u32_be(fv->value);
         snprintf(val_buf, REPT_VAL_BUF_SIZE, "%lu", (unsigned long)id);
 
         tok  = csv_cache_reverse_lookup(&ctx->mgr, fi->csv_name, id, 0 /* short */);
@@ -515,9 +508,9 @@ static const char *resolve_value(
             if (!printable) {
                 uint32_t v;
                 if (fv->length == 2u) {
-                    v = (uint32_t)fv->value[0] | ((uint32_t)fv->value[1] << 8);
+                    v = ((uint32_t)fv->value[0] << 8) | (uint32_t)fv->value[1];
                 } else {
-                    v = decode_le32(fv->value);
+                    v = tlv_read_u32_be(fv->value);
                 }
                 snprintf(val_buf, REPT_VAL_BUF_SIZE, "%lu", (unsigned long)v);
                 *token_out = val_buf;
@@ -537,7 +530,7 @@ static const char *resolve_value(
     default:
         if (fv->length == 4u) {
             snprintf(val_buf, REPT_VAL_BUF_SIZE, "%lu",
-                     (unsigned long)decode_le32(fv->value));
+                     (unsigned long)tlv_read_u32_be(fv->value));
         } else {
             snprintf(val_buf, REPT_VAL_BUF_SIZE, "[len=%u]", (unsigned)fv->length);
         }
@@ -991,7 +984,7 @@ static void write_long_row(FILE *f,
     fputc(',', f);
     if (fi->kind == REPT_FIELD_TOKEN && fv->length == 4u) {
         /* Emit the numeric token ID */
-        fprintf(f, "%lu", (unsigned long)decode_le32(fv->value));
+        fprintf(f, "%lu", (unsigned long)tlv_read_u32_be(fv->value));
     } else if (fi->kind == REPT_FIELD_ARCHIVE_INFO && fv->length == 8u) {
         /* Emit size_kib:CRC32 for clarity */
         fprintf(f, "%lu:%08lX",

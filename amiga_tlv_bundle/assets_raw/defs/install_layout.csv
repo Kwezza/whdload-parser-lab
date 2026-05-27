@@ -1,0 +1,17 @@
+# Install layout tokens describe how the WHDLoad install stores its game data.
+# This is separate from the original media type, such as Disk, CD, HD, or CDTV.
+#
+# Files = extracted or converted game data stored as individual files.
+# Image = game data stored as one or more disk-image style files.
+#
+# Files is marked as the default/preferred layout because it is usually more
+# granular, can be friendlier to low-memory or fragmented-memory systems, and
+# may use less storage than a full disk image. Image remains a valid fallback
+# because some installs are only available or better suited in disk-image form.
+#
+# Suggested base profile priority:
+# include=Files,Image
+#
+#ID, Filename tag, description, is default?
+1,Files,Extracted file layout,default
+2,Image,Disk image layout

@@ -1,0 +1,4 @@
+#ID, Filename tag, description, is default?
+1,Standard,Standard display,default
+2,HiRes,High-resolution display
+3,LoRes,Low-resolution display
