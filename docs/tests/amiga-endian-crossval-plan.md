@@ -389,8 +389,9 @@ the block-framing BE read for `crc32` values specifically.
 ### Test T14 — Mags pack type loads with correct group count
 
 **Purpose:** All five pack types use the same block framing.  Testing a second pack type
-(Mags has 104 groups and a different field layout) confirms that `map_size` and
-`group_count` decode correctly for a pack type whose field count differs from Games.
+(Mags has 104 variants across 103 groups — one magazine has two variants — and a
+different field layout) confirms that `map_size` and `group_count` decode correctly for
+a pack type whose field count differs from Games.
 
 ```
 TLV:     output/Mags(2025-07-24).tlv
@@ -398,7 +399,7 @@ Profile: NULL (default scoring)
 Search:  none
 Assert:
   rc == WHDTLV_OK
-  summary.groups_total == 104
+  summary.groups_total == 103
 ```
 
 ---
@@ -429,9 +430,12 @@ Assert:
 
 ## Pass Criteria
 
-The endianness cross-validation is considered **complete** when all six tests pass
-on physical Amiga hardware (or a correctly configured emulator with AGA, 4MB Fast RAM,
-and the appropriate stack):
+The endianness cross-validation is considered **complete** when all 6 logical tests
+(comprising 34 individual assertions) pass on an Amiga-target binary.  The 6 tests are
+T10, T11, T12 (six fixture sub-cases), T13, T14, and T15.  The 34 assertions are the
+sum of per-test checks listed in the Phase 3 and Phase 4 breakdowns.
+
+Run under WinUAE or on physical hardware with AGA, 4 MB Fast RAM, and a raised stack:
 
 ```
 STACK 100000
@@ -442,7 +446,7 @@ Expected output ending:
 
 ```
 ========================================
-Results: 6 passed, 0 failed
+Results: 34 passed, 0 failed
 ========================================
 ```
 
@@ -573,8 +577,10 @@ magazine has two variants, so `groups_total` is one less: 103.  T14 must assert
 
 `filter_harness.exe` did not exist; it was created at `tools_src/filter_harness/main.c`
 with a `make filter` Makefile target.  `whdtlv_report.exe` was not used for diversity
-verification — it produces garbled CSV output against the new big-endian TLV (the report
-layer's byte-order fix is not yet complete).  Instead, diversity was confirmed by
+verification — it produced garbled CSV output against the new big-endian TLV at the
+time of Phase 2 work.  The cause was not fully investigated during this phase (it may
+be a stale build, an unconverted report path, or a separate reporting-layer bug); a
+follow-up item is recorded at the end of this document.  Instead, diversity was confirmed by
 comparing filter results between profiles: different winners under `pal_aga_4mb` vs
 `chipset_legacy_only` prove that the chipset token ID is being decoded and scored
 correctly.
@@ -751,3 +757,52 @@ The endianness remediation (Items 1–12) is fully validated end-to-end.
 `tests/filtering/test_filter_facade.c` (Tests 1–9) remains unchanged.  The new file is
 additive and independent.  Both target `tests/filtering/` and both use only
 `whdtlv/whdtlv.h`.  They build as separate binaries and can be run independently.
+
+---
+
+## Scope of Validation Closed by This Document
+
+This plan closes the following scope:
+
+**Host-built BE TLV + copied defs/profiles + Amiga filtering facade → same selected
+output as the host oracle.**
+
+Evidence:
+- Host run: 34 passed, 0 failed (GCC x64, 2026-05-27).
+- Amiga run under WinUAE: 34 passed, 0 failed (vbcc 68000, 2026-05-27).
+- Exact fixture parity for all six T12 cases.
+- CRC validation passed (18 files, 0 mismatches).
+- Stack-frame crash (HALT3) found, fixed, and retested.
+
+What is **not** closed by this document:
+
+| Item | Status |
+|---|---|
+| Physical Amiga hardware confirmation | Optional Phase 5 — not yet run |
+| `whdtlv_report.exe` garbled CSV output against BE TLV | Follow-up required — cause unknown |
+| Report layer endianness audit | Separate work item; not covered by the filter facade tests |
+
+### Phase 5 — Physical Amiga hardware confirmation (optional)
+
+The WinUAE run is a high-confidence Amiga-target validation: it uses the vbcc 68000
+binary and caught a real 68k-specific crash (HALT3 from stack overflow).  Physical
+hardware would additionally exercise real Amiga memory timing, custom chip interaction,
+and real AmigaDOS stack behaviour.
+
+If physical hardware confirmation is desired, repeat the Phase 4 procedure with the
+same `amiga_bundle/` on real hardware.  Expected result: identical 34/0 output.
+
+### Follow-up: `whdtlv_report.exe` garbled CSV against BE TLV
+
+During Phase 2, `whdtlv_report.exe` produced garbled CSV output when run against the
+new big-endian TLV files.  This was noted but not investigated further because the
+filter facade tests do not depend on the report tool.  Before declaring all host tooling
+finished, this should be investigated:
+
+1. Confirm whether `build\host\whdtlv_report.exe` was rebuilt after the endianness
+   remediation (`make report` or equivalent), or whether a stale pre-remediation binary
+   was still present.
+2. If the binary is current, identify which report-layer read path is not yet using
+   `tlv_read_u32_be()` / `tlv_read_u16_be()`.
+3. Fix, rebuild, and verify that the report CSV output for
+   `output\Game(2026-04-17).tlv` is no longer garbled.
